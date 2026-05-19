@@ -1,0 +1,2522 @@
+app:
+  description: ''
+  icon: grinning
+  icon_background: '#FFEAD5'
+  icon_type: emoji
+  mode: advanced-chat
+  name: Analysis/Evidence App
+  use_icon_as_answer_icon: false
+dependencies:
+- current_identifier: null
+  type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/deepseek:0.0.15@725407927b04e236212083d20e92830d60fa944e42cd357ef6902c160414f6f1
+    version: null
+kind: app
+version: 0.6.0
+workflow:
+  conversation_variables:
+  - description: ''
+    id: 0cef7ae0-85ee-4b83-86f9-064ff99050ba
+    name: case_state
+    selector:
+    - conversation
+    - case_state
+    value: {}
+    value_type: object
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .JPG
+      - .JPEG
+      - .PNG
+      - .GIF
+      - .WEBP
+      - .SVG
+      allowed_file_types:
+      - image
+      allowed_file_upload_methods:
+      - local_file
+      - remote_url
+      enabled: false
+      fileUploadConfig:
+        attachment_image_file_size_limit: 2
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        file_upload_limit: 20
+        image_file_batch_limit: 10
+        image_file_size_limit: 10
+        single_chunk_attachment_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: if-else
+      id: 17790173607800-source-17790175005460-target
+      source: '17790173607800'
+      sourceHandle: source
+      target: '17790175005460'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: answer
+      id: 17790175005460-6b325610-5573-45d9-976b-011583f37732-1779017616605-target
+      source: '17790175005460'
+      sourceHandle: 6b325610-5573-45d9-976b-011583f37732
+      target: '1779017616605'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: answer
+      id: 17790175005460-false-1779017652106-target
+      source: '17790175005460'
+      sourceHandle: 'false'
+      target: '1779017652106'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: if-else
+        targetType: llm
+      id: 17790175005460-true-17790177962710-target
+      source: '17790175005460'
+      sourceHandle: 'true'
+      target: '17790177962710'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: if-else
+      id: 17790177962710-source-17790178538060-target
+      source: '17790177962710'
+      sourceHandle: source
+      target: '17790178538060'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: if-else
+        targetType: llm
+      id: 17790178538060-false-17790180664100-target
+      source: '17790178538060'
+      sourceHandle: 'false'
+      target: '17790180664100'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: if-else
+        targetType: llm
+      id: 17790178538060-true-1779019674202-target
+      source: '17790178538060'
+      sourceHandle: 'true'
+      target: '1779019674202'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: code
+      id: 1779019674202-source-1779019898002-target
+      source: '1779019674202'
+      sourceHandle: source
+      target: '1779019898002'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: 17790180664100-source-1779018093344-target
+      source: '17790180664100'
+      sourceHandle: source
+      target: '1779018093344'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: llm
+      id: 17790180664100-source-17790752586380-target
+      source: '17790180664100'
+      sourceHandle: source
+      target: '17790752586380'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: code
+      id: 17790752586380-source-17790752765280-target
+      source: '17790752586380'
+      sourceHandle: source
+      target: '17790752765280'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: code
+        targetType: assigner
+      id: 17790752765280-source-17790753072000-target
+      source: '17790752765280'
+      sourceHandle: source
+      target: '17790753072000'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: code
+        targetType: assigner
+      id: 1779019898002-source-1779020389290-target
+      source: '1779019898002'
+      sourceHandle: source
+      target: '1779020389290'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: assigner
+        targetType: llm
+      id: 1779020389290-source-1779075658777-target
+      source: '1779020389290'
+      sourceHandle: source
+      target: '1779075658777'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: if-else
+      id: 1779075658777-source-1779089945812-target
+      source: '1779075658777'
+      sourceHandle: source
+      target: '1779089945812'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: llm
+      id: 1779089945812-true-1779090150084-target
+      source: '1779089945812'
+      sourceHandle: 'true'
+      target: '1779090150084'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: if-else
+        targetType: llm
+      id: 1779089945812-961f289f-713b-40de-8d82-4d0d049e345f-17790915449170-target
+      source: '1779089945812'
+      sourceHandle: 961f289f-713b-40de-8d82-4d0d049e345f
+      target: '17790915449170'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: if-else
+        targetType: llm
+      id: 1779089945812-c78df5fa-0eeb-44db-9cfb-7b0cb9fe54ac-17790937023340-target
+      source: '1779089945812'
+      sourceHandle: c78df5fa-0eeb-44db-9cfb-7b0cb9fe54ac
+      target: '17790937023340'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: if-else
+        targetType: llm
+      id: 1779089945812-3c894d27-9427-45ee-b68d-00923bab7c53-17790946421400-target
+      source: '1779089945812'
+      sourceHandle: 3c894d27-9427-45ee-b68d-00923bab7c53
+      target: '17790946421400'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: llm
+      id: 1779017265744-source-1779168256733-target
+      selected: false
+      source: '1779017265744'
+      sourceHandle: source
+      target: '1779168256733'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: 1779168256733-source-1779168504150-target
+      selected: false
+      source: '1779168256733'
+      sourceHandle: source
+      target: '1779168504150'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: llm
+      id: 1779090150084-source-1779171844208-target
+      source: '1779090150084'
+      sourceHandle: source
+      target: '1779171844208'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: llm
+      id: 17790915449170-source-17791719873810-target
+      source: '17790915449170'
+      sourceHandle: source
+      target: '17791719873810'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: llm
+      id: 17790937023340-source-17791719884180-target
+      source: '17790937023340'
+      sourceHandle: source
+      target: '17791719884180'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: llm
+      id: 17790946421400-source-17791719968260-target
+      source: '17790946421400'
+      sourceHandle: source
+      target: '17791719968260'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: 1779171844208-source-1779172039930-target
+      source: '1779171844208'
+      sourceHandle: source
+      target: '1779172039930'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: 17791719873810-source-1779172265992-target
+      source: '17791719873810'
+      sourceHandle: source
+      target: '1779172265992'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: 17791719884180-source-1779172298249-target
+      source: '17791719884180'
+      sourceHandle: source
+      target: '1779172298249'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: 17791719968260-source-1779172324162-target
+      source: '17791719968260'
+      sourceHandle: source
+      target: '1779172324162'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: start
+        targetType: llm
+      id: 1779017265744-source-17790173607800-target
+      source: '1779017265744'
+      sourceHandle: source
+      target: '17790173607800'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        selected: false
+        title: 用户输入
+        type: start
+        variables:
+        - default: ''
+          hint: ''
+          label: confirmed_claims
+          max_length: 256
+          options: []
+          placeholder: ''
+          required: false
+          type: text-input
+          variable: confirmed_claims
+      height: 108
+      id: '1779017265744'
+      position:
+        x: -700.671208481889
+        y: -83.92947348766157
+      positionAbsolute:
+        x: -700.671208481889
+        y: -83.92947348766157
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - sys
+          - query
+        desc: 进行领域识别
+        isInIteration: false
+        isInLoop: false
+        memory:
+          query_prompt_template: '当前案件状态：
+
+            {{#case_state#}}
+
+
+            当前用户输入：
+
+            {{#sys.query#}}'
+          role_prefix:
+            assistant: ''
+            user: ''
+          window:
+            enabled: true
+            size: 15
+        model:
+          completion_params:
+            temperature: 0.2
+          mode: chat
+          name: deepseek-v4-flash
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: 7bfb9e78-ed92-45b4-a2e1-3b7b8a1edc5e
+          role: system
+          text: '你是领域分类器，只负责判断领域，不判断信息是否完整。
+
+
+
+            只要用户输入出现以下任一词或同义表达，必须输出 marriage_family：
+
+            离婚、结婚、再婚、领证、老公、老婆、丈夫、妻子、配偶、孩子、女儿、儿子、抚养、抚养费、探望、夫妻财产、房子、彩礼、出轨、家暴、继承。
+
+
+            注意：
+
+            “我想离婚”必须输出 marriage_family。
+
+            “我老公出轨了”必须输出 marriage_family。
+
+            “孩子归谁”必须输出 marriage_family。
+
+
+            只有完全无法判断领域时，才输出 unknown。
+
+            例如：“我有个问题”“怎么办”“我很烦”。
+
+
+            如果明确是劳动、租房、借贷、交通事故、消费、公司纠纷，则输出 non_marriage_family。
+
+
+            严格输出结构化字段 route。
+
+            route 只能是：
+
+            marriage_family
+
+            non_marriage_family
+
+            unknown
+
+
+
+            如果历史对话已经明确属于婚姻家事，
+
+            则后续补充信息也应继续识别为 marriage_family，
+
+            即使当前句子本身没有出现“离婚”“出轨”等关键词。
+
+            如果 case_state 中已经存在 divorce_intent、marital_status、has_child、infidelity、property_dispute
+            等婚姻家事状态，则当前输入默认继续属于 marriage_family，除非用户明确切换到劳动、租房、借贷、交通事故等其他领域。
+
+
+            例如：
+
+            第一轮：“我想离婚”
+
+            第二轮：“领证了，有一个女儿”
+
+            第二轮仍然属于 marriage_family。'
+        - id: b26924fc-e649-4d05-8526-f7fa519b13b9
+          role: user
+          text: ''
+        reasoning_format: separated
+        selected: false
+        structured_output:
+          schema:
+            additionalProperties: false
+            properties:
+              route:
+                description: marriage_family non_marriage_family unknown
+                enum:
+                - marriage_family
+                - non_marriage_family
+                - unknown
+                type: string
+            required: []
+            type: object
+        structured_output_enabled: true
+        title: Router
+        type: llm
+        vision:
+          enabled: false
+      height: 115
+      id: '17790173607800'
+      position:
+        x: 1.1696642811634774
+        y: 173
+      positionAbsolute:
+        x: 1.1696642811634774
+        y: 173
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: is
+            id: 522663f4-0f5c-4b0b-aacb-3c3b05b7ae2c
+            value: marriage_family
+            varType: string
+            variable_selector:
+            - '17790173607800'
+            - structured_output
+            - route
+          id: 'true'
+          logical_operator: and
+        - case_id: 6b325610-5573-45d9-976b-011583f37732
+          conditions:
+          - comparison_operator: is
+            id: 0c1c2975-82aa-4610-a9ba-81a80f18a5d1
+            value: non_marriage_family
+            varType: string
+            variable_selector:
+            - '17790173607800'
+            - structured_output
+            - route
+          id: 6b325610-5573-45d9-976b-011583f37732
+          logical_operator: and
+        desc: ''
+        isInIteration: false
+        isInLoop: false
+        selected: false
+        title: 领域识别
+        type: if-else
+      height: 219
+      id: '17790175005460'
+      position:
+        x: 875.5382568359375
+        y: 206
+      positionAbsolute:
+        x: 875.5382568359375
+        y: 206
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#17790173607800.text#}}'
+        desc: 用户提供的消息判定为非婚姻家事领域
+        selected: false
+        title: 输出 A
+        type: answer
+        variables: []
+      height: 130
+      id: '1779017616605'
+      position:
+        x: 1328.459672227214
+        y: 378.532419604642
+      positionAbsolute:
+        x: 1328.459672227214
+        y: 378.532419604642
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#17790173607800.text#}}'
+        desc: 用户提供的消息为无法识别类型
+        selected: false
+        title: 输出 B
+        type: answer
+        variables: []
+      height: 130
+      id: '1779017652106'
+      position:
+        x: 1320.7681197766337
+        y: 657.9803637150865
+      positionAbsolute:
+        x: 1320.7681197766337
+        y: 657.9803637150865
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - sys
+          - query
+        desc: 判用户提供的信息的完整度
+        isInIteration: false
+        isInLoop: false
+        memory:
+          query_prompt_template: '{{#sys.query#}}
+
+
+            '
+          role_prefix:
+            assistant: ''
+            user: ''
+          window:
+            enabled: true
+            size: 9
+        model:
+          completion_params:
+            temperature: 0.2
+          mode: chat
+          name: deepseek-v4-flash
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: 6a052265-88d7-4d71-ac97-88f4f07f9cc4
+          role: system
+          text: "你是婚姻家事诉求结构化助手中的“信息完整度检查器”。\n\n你的任务不是分析案件，也不是给法律建议，而是判断用户当前描述的信息是否足够进入诉求分析阶段。\n\
+            \n请根据用户输入判断 information_sufficiency：\n\n- high：用户已经提供了明确事实、争议点和至少一个具体目标，可以进入诉求分析。\n\
+            - low：用户只表达了笼统问题或信息过少，需要先收集基础信息。\n\n判断标准：\n如果用户只是说“我想离婚”“我有婚姻问题”“孩子怎么办”“财产怎么分”等，通常为\
+            \ low。\n如果用户描述了具体事实，例如“老公出轨还偷偷转钱，我想离婚”“孩子一直我带，对方不给抚养费”，通常为 high。\n\n必须严格只输出\
+            \ JSON。\n\n输出格式：\n{\n  \"information_sufficiency\": \"\",\n  \"missing_core_information\"\
+            : []\n}\n\ninformation_sufficiency 只能是：\n- high\n- low\n\nmissing_core_information\
+            \ 用于列出还缺少的核心信息。\nmissing_core_information 不要输出抽象词，例如“具体事实描述”“争议点”“诉求目标”。必须输出用户可直接回答的问题，例如“是否有子女”“是否存在财产争议”“对方是否同意离婚”。\n\
+            如果 information_sufficiency 是 high，missing_core_information 可以为空数组。\n\n\
+            禁止输出解释。\n禁止输出多余文字。\n请结合最近对话历史判断信息完整度，不要忽略用户之前已经补充的信息。"
+        - id: dd788682-f35e-42d7-94c2-fe8b324a4063
+          role: user
+          text: ''
+        reasoning_format: separated
+        selected: false
+        title: Information Sufficiency Check
+        type: llm
+        vision:
+          enabled: false
+      height: 115
+      id: '17790177962710'
+      position:
+        x: 1291.4397216796876
+        y: 179
+      positionAbsolute:
+        x: 1291.4397216796876
+        y: 179
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: contains
+            id: 66f1c58a-760f-4a89-bba0-ead90feb574c
+            value: high
+            varType: string
+            variable_selector:
+            - '17790177962710'
+            - text
+          id: 'true'
+          logical_operator: and
+        desc: ''
+        isInIteration: false
+        isInLoop: false
+        selected: false
+        title: 信息完整度判断
+        type: if-else
+      height: 123
+      id: '17790178538060'
+      position:
+        x: 1626.4397216796876
+        y: 173
+      positionAbsolute:
+        x: 1626.4397216796876
+        y: 173
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: true
+          variable_selector: []
+        desc: 当用户提供的数据不足以进行分析时，要向用户进行追问
+        isInIteration: false
+        isInLoop: false
+        memory:
+          query_prompt_template: '当前案件状态：
+
+            {{#case_state#}}
+
+
+            用户最新输入：
+
+            {{#sys.query#}}
+
+
+            '
+          role_prefix:
+            assistant: ''
+            user: ''
+          window:
+            enabled: true
+            size: 20
+        model:
+          completion_params:
+            temperature: 0.3
+          mode: chat
+          name: deepseek-v4-pro
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: c3cee46a-7498-405a-b4ed-3030b7e49260
+          role: system
+          text: '你是婚姻家事诉求结构化助手中的“基础信息收集器”。
+
+
+            当前用户输入已被判断为婚姻家事相关，但信息不足，暂时不能进入诉求分析阶段。
+
+
+            你的任务是向用户提出少量关键问题，帮助补足基础信息。
+
+
+            要求：
+
+            1. 不进行案件分析。
+
+            2. 不输出法律结论。
+
+            3. 不提供正式法律意见。
+
+            4. 最多提出 4 个问题。
+
+            5. 问题必须具体、容易回答。
+
+            6. 优先询问会影响后续诉求判断的信息。
+
+            7.避免重复询问用户已经回答过的问题
+
+            8.请根据 case_state 只追问仍缺失的关键信息，避免重复询问已经明确的信息。
+
+
+            优先询问：
+
+            1. 是否已经登记结婚
+
+            2. 是否有未成年子女
+
+            3. 是否存在夫妻共同财产或债务争议
+
+            4. 是否存在出轨、家暴、财产转移等情况
+
+            5. 用户当前最想优先解决的问题
+
+            除非用户主动提到同居、事实婚姻、未领证关系，否则不要询问“事实婚姻”或“1994年2月1日前同居”等问题。
+
+            输出必须是中文自然语言，不要输出 JSON。
+
+
+
+            你需要根据已有对话和用户最新输入，只追问仍缺失的关键信息。
+
+
+            不要重复询问用户已经回答过的问题。
+
+
+            每次最多问 1-2 个问题。
+
+
+            如果当前信息已经足够进行诉求结构化分析，
+
+            则不要继续追问，
+
+            直接输出：
+
+
+            【READY_FOR_ANALYSIS】'
+        reasoning_format: separated
+        selected: false
+        title: Intake
+        type: llm
+        vision:
+          enabled: false
+      height: 131
+      id: '17790180664100'
+      position:
+        x: 2009.2870849609371
+        y: 400.86845703125005
+      positionAbsolute:
+        x: 2009.2870849609371
+        y: 400.86845703125005
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#17790180664100.text#}}'
+        selected: false
+        title: Intake.text
+        type: answer
+        variables: []
+      height: 102
+      id: '1779018093344'
+      position:
+        x: 2558.0254350953487
+        y: 400.86845703125005
+      positionAbsolute:
+        x: 2558.0254350953487
+        y: 400.86845703125005
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - sys
+          - query
+        desc: 把用户自然语言转成state patch
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: deepseek-v4-flash
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: f5bda188-851b-41f5-8bf9-60e8d76544cb
+          role: system
+          text: "你是婚姻家事案件状态提取器。\n\n你的任务是：\n\n根据用户最新输入，\n提取可以明确确认的案件状态。\n\n禁止推断用户未明确表达的信息。\n\
+            \n只更新用户本轮新提到的信息。\n\n输出必须是 JSON。\n你必须把结果放入patch字段中\n\nState Schema：\n\n\
+            {\n  \"marital_status\": null,\n  \"has_child\": null,\n  \"child_adult\"\
+            : null,\n  \"divorce_intent\": null,\n  \"property_dispute\": null,\n\
+            \  \"custody_dispute\": null,\n  \"infidelity\": null,\n  \"domestic_violence\"\
+            : null,\n  \"property_transfer\": null,\n  \"negotiation_started\": null\n\
+            }\n\n如果用户输入是“我想离婚”，必须输出：\n{\"patch\":{\"divorce_intent\":true}}\n\n如果用户输入是“我老公出轨”，必须输出：\n\
+            {\"patch\":{\"infidelity\":true}}\n\n如果用户输入是“有一个女儿”，必须输出：\n{\"patch\"\
+            :{\"has_child\":true}}\n\n不要输出空 patch，除非用户输入完全没有婚姻家事相关信息。\n\n如果用户提到房产、房贷、婚后买房、存款、车辆、债务、财产分割，输出\
+            \ property_dispute: true。\n如果用户提到偷偷转账、转移财产、隐匿财产、异常转账，输出 property_transfer:\
+            \ true。"
+        selected: false
+        structured_output:
+          schema:
+            properties:
+              patch:
+                properties:
+                  child_adult:
+                    type:
+                    - boolean
+                    - 'null'
+                  custody_dispute:
+                    type:
+                    - boolean
+                    - 'null'
+                  divorce_intent:
+                    type:
+                    - boolean
+                    - 'null'
+                  domestic_violence:
+                    type:
+                    - boolean
+                    - 'null'
+                  has_child:
+                    type:
+                    - boolean
+                    - 'null'
+                  infidelity:
+                    type:
+                    - boolean
+                    - 'null'
+                  marital_status:
+                    type:
+                    - string
+                    - 'null'
+                  negotiation_started:
+                    type:
+                    - boolean
+                    - 'null'
+                  property_dispute:
+                    type:
+                    - boolean
+                    - 'null'
+                  property_transfer:
+                    type:
+                    - boolean
+                    - 'null'
+                type: object
+            required: []
+            type: object
+        structured_output_enabled: true
+        title: State Extractor
+        type: llm
+        vision:
+          enabled: false
+      height: 115
+      id: '1779019674202'
+      position:
+        x: 2165.417586930472
+        y: 35.31616233926482
+      positionAbsolute:
+        x: 2165.417586930472
+        y: 35.31616233926482
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        code: "def main(old_state: object, new_patch: str):\n    import json\n   \
+          \ import re\n\n    if not old_state:\n        old_state = {}\n\n    if isinstance(old_state,\
+          \ str):\n        try:\n            old_state = json.loads(old_state)\n \
+          \       except Exception:\n            old_state = {}\n\n    if not new_patch:\n\
+          \        new_patch = \"{}\"\n\n    if isinstance(new_patch, str):\n    \
+          \    # 去掉可能的 <think>...</think>\n        new_patch = re.sub(r\"<think>.*?</think>\"\
+          , \"\", new_patch, flags=re.S).strip()\n\n        # 提取第一个 JSON 对象\n    \
+          \    match = re.search(r\"\\{.*\\}\", new_patch, flags=re.S)\n        if\
+          \ match:\n            new_patch = match.group(0)\n        else:\n      \
+          \      new_patch = \"{}\"\n\n        try:\n            new_patch = json.loads(new_patch)\n\
+          \        except Exception:\n            new_patch = {}\n\n    def deep_merge(old,\
+          \ new):\n        for k, v in new.items():\n            if isinstance(v,\
+          \ dict) and isinstance(old.get(k), dict):\n                old[k] = deep_merge(old[k],\
+          \ v)\n            else:\n                old[k] = v\n        return old\n\
+          \n    merged = deep_merge(old_state, new_patch)\n\n    return {\n      \
+          \  \"merged_state\": merged\n    }"
+        code_language: python3
+        outputs:
+          merged_state:
+            children: null
+            type: object
+        selected: false
+        title: STATE MERGE
+        type: code
+        variables:
+        - value_selector:
+          - conversation
+          - case_state
+          value_type: object
+          variable: old_state
+        - value_selector:
+          - '1779019674202'
+          - structured_output
+          - patch
+          value_type: object
+          variable: new_patch
+      height: 51
+      id: '1779019898002'
+      position:
+        x: 2522.3323462773687
+        y: 35.31616233926482
+      positionAbsolute:
+        x: 2522.3323462773687
+        y: 35.31616233926482
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        items:
+        - input_type: variable
+          operation: over-write
+          value:
+          - '1779019898002'
+          - merged_state
+          variable_selector:
+          - conversation
+          - case_state
+        selected: false
+        title: 变量赋值
+        type: assigner
+        version: '2'
+      height: 83
+      id: '1779020389290'
+      position:
+        x: 2957.1843631834904
+        y: 35.31616233926482
+      positionAbsolute:
+        x: 2957.1843631834904
+        y: 35.31616233926482
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - sys
+          - query
+        desc: 把用户自然语言转成state patch
+        isInIteration: false
+        isInLoop: false
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: deepseek-v4-flash
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: f5bda188-851b-41f5-8bf9-60e8d76544cb
+          role: system
+          text: "你是婚姻家事案件状态提取器。\n\n你的任务是：\n\n根据用户最新输入，\n提取可以明确确认的案件状态。\n\n禁止推断用户未明确表达的信息。\n\
+            \n只更新用户本轮新提到的信息。\n\n输出必须是 JSON。\n你必须把结果放入patch字段中\n\nState Schema：\n\n\
+            {\n  \"marital_status\": null,\n  \"has_child\": null,\n  \"child_adult\"\
+            : null,\n  \"divorce_intent\": null,\n  \"property_dispute\": null,\n\
+            \  \"custody_dispute\": null,\n  \"infidelity\": null,\n  \"domestic_violence\"\
+            : null,\n  \"property_transfer\": null,\n  \"negotiation_started\": null\n\
+            }"
+        selected: false
+        structured_output:
+          schema:
+            properties:
+              patch:
+                properties:
+                  child_adult:
+                    type:
+                    - boolean
+                    - 'null'
+                  custody_dispute:
+                    type:
+                    - boolean
+                    - 'null'
+                  divorce_intent:
+                    type:
+                    - boolean
+                    - 'null'
+                  domestic_violence:
+                    type:
+                    - boolean
+                    - 'null'
+                  has_child:
+                    type:
+                    - boolean
+                    - 'null'
+                  infidelity:
+                    type:
+                    - boolean
+                    - 'null'
+                  marital_status:
+                    type:
+                    - string
+                    - 'null'
+                  negotiation_started:
+                    type:
+                    - boolean
+                    - 'null'
+                  property_dispute:
+                    type:
+                    - boolean
+                    - 'null'
+                  property_transfer:
+                    type:
+                    - boolean
+                    - 'null'
+                type: object
+            required: []
+            type: object
+        structured_output_enabled: true
+        title: State Extractor (1)
+        type: llm
+        vision:
+          enabled: false
+      height: 115
+      id: '17790752586380'
+      position:
+        x: 2558.0254350953487
+        y: 564.6501846788303
+      positionAbsolute:
+        x: 2558.0254350953487
+        y: 564.6501846788303
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        code: "def main(old_state: object, new_patch: str):\n    import json\n   \
+          \ import re\n\n    if not old_state:\n        old_state = {}\n\n    if isinstance(old_state,\
+          \ str):\n        try:\n            old_state = json.loads(old_state)\n \
+          \       except Exception:\n            old_state = {}\n\n    if not new_patch:\n\
+          \        new_patch = \"{}\"\n\n    if isinstance(new_patch, str):\n    \
+          \    # 去掉可能的 <think>...</think>\n        new_patch = re.sub(r\"<think>.*?</think>\"\
+          , \"\", new_patch, flags=re.S).strip()\n\n        # 提取第一个 JSON 对象\n    \
+          \    match = re.search(r\"\\{.*\\}\", new_patch, flags=re.S)\n        if\
+          \ match:\n            new_patch = match.group(0)\n        else:\n      \
+          \      new_patch = \"{}\"\n\n        try:\n            new_patch = json.loads(new_patch)\n\
+          \        except Exception:\n            new_patch = {}\n\n    def deep_merge(old,\
+          \ new):\n        for k, v in new.items():\n            if isinstance(v,\
+          \ dict) and isinstance(old.get(k), dict):\n                old[k] = deep_merge(old[k],\
+          \ v)\n            else:\n                old[k] = v\n        return old\n\
+          \n    merged = deep_merge(old_state, new_patch)\n\n    return {\n      \
+          \  \"merged_state\": merged\n    }"
+        code_language: python3
+        desc: ''
+        isInIteration: false
+        isInLoop: false
+        outputs:
+          merged_state:
+            children: null
+            type: object
+        selected: false
+        title: STATE MERGE (1)
+        type: code
+        variables:
+        - value_selector:
+          - conversation
+          - case_state
+          value_type: object
+          variable: old_state
+        - value_selector:
+          - '17790752586380'
+          - structured_output
+          - patch
+          value_type: object
+          variable: new_patch
+      height: 51
+      id: '17790752765280'
+      position:
+        x: 2883.5135047253484
+        y: 556.8724762811285
+      positionAbsolute:
+        x: 2883.5135047253484
+        y: 556.8724762811285
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        desc: ''
+        isInIteration: false
+        isInLoop: false
+        items:
+        - input_type: variable
+          operation: over-write
+          value:
+          - '17790752765280'
+          - merged_state
+          variable_selector:
+          - conversation
+          - case_state
+        selected: false
+        title: 变量赋值 (1)
+        type: assigner
+        version: '2'
+      height: 83
+      id: '17790753072000'
+      position:
+        x: 3288.022795113786
+        y: 556.8724762811285
+      positionAbsolute:
+        x: 3288.022795113786
+        y: 556.8724762811285
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: 根据case_state判断要激活哪些分析模块
+        model:
+          completion_params:
+            temperature: 0.1
+          mode: chat
+          name: deepseek-v4-flash
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: 894a4aa3-9bc9-4066-82a0-5bd406e1d599
+          role: system
+          text: '根据用户最新输入判断模块
+
+            如果 patch 中 divorce_intent 为 true，输出 marriage。
+
+            如果 patch 中 has_child 为 true 且 child_adult 不是 true，输出 children。
+
+            如果 patch 中 property_dispute、property_transfer 为 true，输出 property。
+
+            如果 patch 中 infidelity、domestic_violence 为 true，输出 fault。
+
+
+            必须只输出结构化字段 modules，不允许只输出单个字符串。
+
+            即使只有一个模块，也必须输出数组，例如：
+
+            {"modules":["marriage"]}
+
+            如果用户输入或 patch 中出现以下信息，必须包含 property：
+
+            房子、房产、婚后买房、房贷、贷款、存款、车辆、债务、转账、偷偷转钱、财产、共同财产、财产分割、财产转移。
+
+
+            例如：
+
+            “我们婚后买了一套房，房贷还没还完，他最近偷偷转账”
+
+            必须输出：
+
+            {"modules":["property"]}'
+        - id: 0167b07c-bb77-42fe-92f4-45150923e368
+          role: user
+          text: '{{#sys.query#}}'
+        reasoning_format: separated
+        selected: false
+        structured_output:
+          schema:
+            properties:
+              modules:
+                items:
+                  enum:
+                  - marriage
+                  - children
+                  - property
+                  - fault
+                  type: string
+                type: array
+            required: []
+            type: object
+        structured_output_enabled: true
+        title: Analysis Router
+        type: llm
+        vision:
+          enabled: false
+      height: 115
+      id: '1779075658777'
+      position:
+        x: 3449.1458825262835
+        y: 35.31616233926482
+      positionAbsolute:
+        x: 3449.1458825262835
+        y: 35.31616233926482
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: contains
+            id: 4d38a848-ade2-4a58-b3d1-9611db969b8f
+            value: marriage
+            varType: string
+            variable_selector:
+            - '1779075658777'
+            - text
+          id: 'true'
+          logical_operator: and
+        - case_id: 961f289f-713b-40de-8d82-4d0d049e345f
+          conditions:
+          - comparison_operator: contains
+            id: 6b7c2a7b-3814-48e7-93f0-fcf05fe06437
+            value: property
+            varType: string
+            variable_selector:
+            - '1779075658777'
+            - text
+          id: 961f289f-713b-40de-8d82-4d0d049e345f
+          logical_operator: and
+        - case_id: c78df5fa-0eeb-44db-9cfb-7b0cb9fe54ac
+          conditions:
+          - comparison_operator: contains
+            id: 3657f483-a737-479e-bebc-86d63331e27c
+            value: children
+            varType: string
+            variable_selector:
+            - '1779075658777'
+            - text
+          id: c78df5fa-0eeb-44db-9cfb-7b0cb9fe54ac
+          logical_operator: and
+        - case_id: 3c894d27-9427-45ee-b68d-00923bab7c53
+          conditions:
+          - comparison_operator: contains
+            id: 7891ecee-ef9e-49db-9c42-1f8337761eb9
+            value: fault
+            varType: string
+            variable_selector:
+            - '1779075658777'
+            - text
+          id: 3c894d27-9427-45ee-b68d-00923bab7c53
+          logical_operator: and
+        desc: 根据analysis router分析得出的moudle进入具体的细分领域
+        selected: false
+        title: 模块分流
+        type: if-else
+      height: 383
+      id: '1779089945812'
+      position:
+        x: 3751.1458825262835
+        y: 35.31616233926482
+      positionAbsolute:
+        x: 3751.1458825262835
+        y: 35.31616233926482
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: 婚姻身份关系细分模型，只分析：1.是否离婚 2.婚姻状态 3.感情破裂 4.协议/诉讼
+        model:
+          completion_params:
+            temperature: 0.2
+          mode: chat
+          name: deepseek-v4-flash
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: dcc8ed10-bdd9-44e1-acb0-51543c5a6f02
+          role: system
+          text: '你是婚姻家事诉求结构化助手中的“婚姻关系分析模块”。
+
+
+            你的任务是：
+
+
+            1. 分析婚姻关系状态
+
+            2. 判断是否存在离婚诉求
+
+            3. 判断是否存在感情破裂因素
+
+            4. 判断适合协议离婚还是诉讼离婚
+
+            5. 识别当前缺失的关键婚姻关系信息
+
+
+            你只能分析婚姻关系。
+
+
+            不要分析：
+
+            - 财产分割
+
+            - 子女抚养
+
+            - 出轨赔偿
+
+            - 家暴赔偿
+
+
+            输出必须结构化。
+
+
+            如果信息不足，要明确指出 missing_information。
+
+
+            不要编造事实。
+
+
+            不要承诺案件结果。'
+        - id: 36cd10b8-4cfa-4d57-bebb-7ced1f5e214e
+          role: user
+          text: 当前案件状态：{{#1779019674202.structured_output.patch#}}
+        reasoning_format: separated
+        selected: false
+        structured_output:
+          schema:
+            properties:
+              divorce_intent_analysis:
+                type: string
+              divorce_path:
+                enum:
+                - agreement
+                - litigation
+                - uncertain
+                type: string
+              marital_status_analysis:
+                type: string
+              missing_information:
+                items:
+                  type: string
+                type: array
+              relationship_breakdown:
+                type: string
+            required:
+            - marital_status_analysis
+            - divorce_intent_analysis
+            - relationship_breakdown
+            - divorce_path
+            - missing_information
+            type: object
+        structured_output_enabled: true
+        title: Marriage Analysis
+        type: llm
+        vision:
+          enabled: false
+      height: 131
+      id: '1779090150084'
+      position:
+        x: 4060.46634838083
+        y: -145.25532873953625
+      positionAbsolute:
+        x: 4060.46634838083
+        y: -145.25532873953625
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: 婚姻财产关系细分模型，只分析：房产、存款、债务、股权、财产转移、财产分割、隐匿财产、异常转账
+        isInIteration: false
+        isInLoop: false
+        model:
+          completion_params:
+            temperature: 0.2
+          mode: chat
+          name: deepseek-v4-flash
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: dcc8ed10-bdd9-44e1-acb0-51543c5a6f02
+          role: system
+          text: '你是婚姻家事诉求结构化助手中的“财产问题分析模块”。
+
+
+            你只负责分析婚姻家事中的财产、债务和财产转移问题。
+
+
+            你的任务：
+
+            1. 识别是否存在夫妻共同财产争议
+
+            2. 识别房产、存款、车辆、股权、保险、债务等财产类型
+
+            3. 判断是否存在财产转移、隐匿、挥霍等风险
+
+            4. 映射可能涉及的财产类诉求
+
+            5. 给出财产类证据建议
+
+            6. 标记仍需补充的信息
+
+
+            你不要分析：
+
+            - 是否离婚
+
+            - 子女抚养
+
+            - 探望权
+
+            - 出轨赔偿
+
+            - 家暴赔偿
+
+
+            注意：
+
+            - 不提供正式法律意见
+
+            - 不承诺结果
+
+            - 不使用“净身出户”等绝对化表述
+
+            - 对用户未明确说明的信息，必须标记为“待确认”
+
+            - 对用户主观描述，使用“用户称”“用户表示”“用户描述”
+
+            - 不要主动扩展无关财产类型
+
+            - 只输出结构化 JSON
+
+            -只输出结构化字段，不要输出 <think>、推理过程、解释说明或 Markdown。'
+        - id: 36cd10b8-4cfa-4d57-bebb-7ced1f5e214e
+          role: user
+          text: 当前案件状态：{{#1779019674202.structured_output.patch#}}
+        reasoning_format: separated
+        selected: false
+        structured_output:
+          schema:
+            properties:
+              evidence_suggestions:
+                items:
+                  type: string
+                type: array
+              missing_information:
+                items:
+                  type: object
+                type: array
+              property_claims:
+                items:
+                  type: object
+                type: array
+              property_facts:
+                items:
+                  type: object
+                type: array
+              property_risks:
+                items:
+                  type: string
+                type: array
+            required:
+            - property_facts
+            - property_claims
+            - property_risks
+            - missing_information
+            - evidence_suggestions
+            type: object
+        structured_output_enabled: true
+        title: 'Property Analysis '
+        type: llm
+        vision:
+          enabled: false
+      height: 147
+      id: '17790915449170'
+      position:
+        x: 4060.46634838083
+        y: 10.282528954643197
+      positionAbsolute:
+        x: 4060.46634838083
+        y: 10.282528954643197
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: 婚姻子女关系细分模型，只分析：子女情况、抚养权、探望权、实际照顾关系
+        isInIteration: false
+        isInLoop: false
+        model:
+          completion_params:
+            temperature: 0.2
+          mode: chat
+          name: deepseek-v4-flash
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: dcc8ed10-bdd9-44e1-acb0-51543c5a6f02
+          role: system
+          text: '你是婚姻家事诉求结构化助手中的“子女问题分析模块”。
+
+
+            你只负责分析：
+
+            - 未成年子女情况
+
+            - 抚养权争议
+
+            - 抚养费
+
+            - 探望权
+
+            - 实际照顾关系
+
+
+            你的任务：
+
+
+            1. 识别子女基本情况
+
+            2. 判断是否存在抚养权争议
+
+            3. 判断是否涉及抚养费问题
+
+            4. 判断是否涉及探望权问题
+
+            5. 识别对子女抚养最关键的缺失信息
+
+            6. 给出子女相关证据建议
+
+
+            不要分析：
+
+            - 财产分割
+
+            - 离婚路径
+
+            - 出轨赔偿
+
+            - 家暴赔偿
+
+
+            注意：
+
+            - 不提供正式法律意见
+
+            - 不承诺结果
+
+            - 不编造事实
+
+            - 对用户未明确说明的信息，标记为“待确认”
+
+            - 只输出结构化字段
+
+            - 不输出 <think>
+
+            -顶层必须包含且只能包含 children_facts、custody_claims、support_issues、missing_information、evidence_suggestions
+            五个字段。'
+        - id: 352db010-8ade-4171-81d9-2df6df2f4678
+          role: user
+          text: '{{#sys.query#}}'
+        reasoning_format: separated
+        selected: false
+        structured_output:
+          schema:
+            properties:
+              children_facts:
+                items:
+                  type: object
+                type: array
+              custody_claims:
+                items:
+                  type: object
+                type: array
+              evidence_suggestions:
+                items:
+                  type: string
+                type: array
+              missing_information:
+                items:
+                  type: object
+                type: array
+              support_issues:
+                items:
+                  type: string
+                type: array
+            required:
+            - children_facts
+            - custody_claims
+            - support_issues
+            - missing_information
+            - evidence_suggestions
+            type: object
+        structured_output_enabled: true
+        title: 'Children Analysis  '
+        type: llm
+        vision:
+          enabled: false
+      height: 131
+      id: '17790937023340'
+      position:
+        x: 4054.309278847916
+        y: 240.17137577130143
+      positionAbsolute:
+        x: 4054.309278847916
+        y: 240.17137577130143
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: 婚姻过错关系细分模型，只分析：出轨、家暴、赌博、威胁、人身安全风险、离婚过错责任
+        isInIteration: false
+        isInLoop: false
+        model:
+          completion_params:
+            temperature: 0.2
+          mode: chat
+          name: deepseek-v4-flash
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: dcc8ed10-bdd9-44e1-acb0-51543c5a6f02
+          role: system
+          text: '你是婚姻家事诉求结构化助手中的“婚内过错分析模块”。
+
+
+            你只负责分析：
+
+            - 出轨
+
+            - 家暴
+
+            - 赌博
+
+            - 威胁
+
+            - 人身安全风险
+
+            - 离婚损害赔偿相关问题
+
+
+            你的任务：
+
+
+            1. 识别婚内过错行为
+
+            2. 判断是否可能涉及离婚损害赔偿
+
+            3. 判断是否存在人身安全风险
+
+            4. 给出证据建议
+
+            5. 标记关键缺失信息
+
+
+            不要分析：
+
+            - 抚养权
+
+            - 财产分割比例
+
+            - 协议离婚
+
+            - 具体诉讼策略
+
+
+            注意：
+
+            - 不提供正式法律意见
+
+            - 不承诺结果
+
+            - 不使用“净身出户”等绝对化表述
+
+            - 对用户未明确说明的信息，标记为“待确认”
+
+            - 对用户主观描述使用“用户称”“用户描述”
+
+            - 只输出结构化字段
+
+            - 不输出 <think>
+
+            -顶层必须包含且只能包含：
+
+            fault_facts
+
+            compensation_possibility
+
+            safety_risks
+
+            property_transfer_risks
+
+            missing_information
+
+            evidence_suggestions'
+        - id: 352db010-8ade-4171-81d9-2df6df2f4678
+          role: user
+          text: '{{#sys.query#}}'
+        reasoning_format: separated
+        selected: false
+        structured_output:
+          schema:
+            properties:
+              compensation_possibility:
+                type: string
+              evidence_suggestions:
+                items:
+                  type: string
+                type: array
+              fault_facts:
+                items:
+                  type: object
+                type: array
+              missing_information:
+                items:
+                  type: object
+                type: array
+              safety_risks:
+                items:
+                  type: string
+                type: array
+            required:
+            - fault_facts
+            - compensation_possibility
+            - safety_risks
+            - missing_information
+            - evidence_suggestions
+            type: object
+        structured_output_enabled: true
+        title: 'Fault Analysis   '
+        type: llm
+        vision:
+          enabled: false
+      height: 147
+      id: '17790946421400'
+      position:
+        x: 4054.309278847916
+        y: 387.70246896921736
+      positionAbsolute:
+        x: 4054.309278847916
+        y: 387.70246896921736
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: 识别用户可能涉及的法律诉求
+        model:
+          completion_params:
+            temperature: 0.2
+          mode: chat
+          name: deepseek-v4-pro
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: 05ca9130-ff28-487b-b879-c75aa64fce5a
+          role: system
+          text: '你是婚姻家事诉求发现助手。
+
+
+            用户往往：
+
+            - 情绪化
+
+            - 表达模糊
+
+            - 不懂法律
+
+            - 不知道自己真正想解决什么
+
+
+            你的任务：
+
+
+            根据用户自然语言：
+
+
+            识别用户可能涉及的法律诉求。
+
+
+            不要分析法律。
+
+
+            不要输出法律结论。
+
+
+            重点：
+
+            - 发现潜在诉求
+
+            - 不遗漏重要问题
+
+            - 管理不确定性
+
+
+            输出：
+
+            - claim
+
+            - confidence
+
+            - reason
+
+
+            如果存在不确定性，必须明确说明。'
+        - id: 335700f1-189c-40e4-a75c-387e8541260e
+          role: user
+          text: '{{#sys.query#}}'
+        reasoning_format: separated
+        selected: false
+        structured_output:
+          schema:
+            properties:
+              possible_claims:
+                items:
+                  properties:
+                    claim:
+                      type: string
+                    confidence:
+                      type: string
+                    reason:
+                      type: string
+                  required:
+                  - claim
+                  - confidence
+                  - reason
+                  type: object
+                type: array
+            required:
+            - possible_claims
+            type: object
+        structured_output_enabled: true
+        title: Intent Discovery
+        type: llm
+        vision:
+          enabled: false
+      height: 115
+      id: '1779168256733'
+      position:
+        x: -307.22710387600114
+        y: -268.73406504868706
+      positionAbsolute:
+        x: -307.22710387600114
+        y: -268.73406504868706
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#1779168256733.structured_output#}}'
+        selected: false
+        title: Possible_Claims
+        type: answer
+        variables: []
+      height: 102
+      id: '1779168504150'
+      position:
+        x: 58.25707819955005
+        y: -259.6544507151124
+      positionAbsolute:
+        x: 58.25707819955005
+        y: -259.6544507151124
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: 罗列证据清单
+        model:
+          completion_params:
+            temperature: 0.4
+          mode: chat
+          name: deepseek-v4-pro
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: 425aacc4-3ada-4212-b7d9-0f3ad3ecb98b
+          role: system
+          text: '你是婚姻家事诉求结构化助手中的“证据准备清单生成器”。
+
+
+            你的任务不是提供正式法律意见，也不是判断胜诉结果。
+
+
+            你的任务是根据：
+
+            1. 用户已确认的诉求
+
+            2. 当前案件事实
+
+            3. 各模块分析结果
+
+
+            生成用户去律所咨询前应准备的证据材料清单。
+
+
+            输出重点：
+
+            - 用户需要准备什么材料
+
+            - 为什么要准备
+
+            - 优先级是什么
+
+            - 哪些材料目前缺失
+
+            - 哪些材料涉及风险，需要注意合法获取
+
+
+            要求：
+
+            1. 不承诺案件结果
+
+            2. 不替代律师判断
+
+            3. 不输出具体胜诉概率
+
+            4. 不使用“净身出户”等绝对化表述
+
+            5. 证据建议必须具体、可执行
+
+            6. 优先围绕用户确认的诉求生成证据清单'
+        selected: false
+        structured_output:
+          schema:
+            properties:
+              confirmed_claims:
+                items:
+                  type: string
+                type: array
+              general_evidence:
+                items:
+                  type: object
+                type: array
+              lawyer_visit_checklist:
+                items:
+                  type: string
+                type: array
+              missing_evidence:
+                items:
+                  type: object
+                type: array
+              priority_evidence:
+                items:
+                  type: object
+                type: array
+              risk_notes:
+                items:
+                  type: string
+                type: array
+            required:
+            - confirmed_claims
+            - priority_evidence
+            - general_evidence
+            - missing_evidence
+            - risk_notes
+            - lawyer_visit_checklist
+            type: object
+        structured_output_enabled: true
+        title: Evidence Preparation Generation
+        type: llm
+        vision:
+          enabled: false
+      height: 115
+      id: '1779171844208'
+      position:
+        x: 4387.935842960515
+        y: -145.25532873953625
+      positionAbsolute:
+        x: 4387.935842960515
+        y: -145.25532873953625
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: 罗列证据清单
+        isInIteration: false
+        isInLoop: false
+        model:
+          completion_params:
+            temperature: 0.4
+          mode: chat
+          name: deepseek-v4-pro
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: 425aacc4-3ada-4212-b7d9-0f3ad3ecb98b
+          role: system
+          text: '你是婚姻家事诉求结构化助手中的“证据准备清单生成器”。
+
+
+            你的任务不是提供正式法律意见，也不是判断胜诉结果。
+
+
+            你的任务是根据：
+
+            1. 用户已确认的诉求
+
+            2. 当前案件事实
+
+            3. 各模块分析结果
+
+
+            生成用户去律所咨询前应准备的证据材料清单。
+
+
+            输出重点：
+
+            - 用户需要准备什么材料
+
+            - 为什么要准备
+
+            - 优先级是什么
+
+            - 哪些材料目前缺失
+
+            - 哪些材料涉及风险，需要注意合法获取
+
+
+            要求：
+
+            1. 不承诺案件结果
+
+            2. 不替代律师判断
+
+            3. 不输出具体胜诉概率
+
+            4. 不使用“净身出户”等绝对化表述
+
+            5. 证据建议必须具体、可执行
+
+            6. 优先围绕用户确认的诉求生成证据清单'
+        selected: false
+        structured_output:
+          schema:
+            properties:
+              confirmed_claims:
+                items:
+                  type: string
+                type: array
+              general_evidence:
+                items:
+                  type: object
+                type: array
+              lawyer_visit_checklist:
+                items:
+                  type: string
+                type: array
+              missing_evidence:
+                items:
+                  type: object
+                type: array
+              priority_evidence:
+                items:
+                  type: object
+                type: array
+              risk_notes:
+                items:
+                  type: string
+                type: array
+            required:
+            - confirmed_claims
+            - priority_evidence
+            - general_evidence
+            - missing_evidence
+            - risk_notes
+            - lawyer_visit_checklist
+            type: object
+        structured_output_enabled: true
+        title: Evidence Preparation Generation (1)
+        type: llm
+        vision:
+          enabled: false
+      height: 115
+      id: '17791719873810'
+      position:
+        x: 4387.935842960515
+        y: 57.65891388186759
+      positionAbsolute:
+        x: 4387.935842960515
+        y: 57.65891388186759
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: 罗列证据清单
+        isInIteration: false
+        isInLoop: false
+        model:
+          completion_params:
+            temperature: 0.4
+          mode: chat
+          name: deepseek-v4-pro
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: 425aacc4-3ada-4212-b7d9-0f3ad3ecb98b
+          role: system
+          text: '你是婚姻家事诉求结构化助手中的“证据准备清单生成器”。
+
+
+            你的任务不是提供正式法律意见，也不是判断胜诉结果。
+
+
+            你的任务是根据：
+
+            1. 用户已确认的诉求
+
+            2. 当前案件事实
+
+            3. 各模块分析结果
+
+
+            生成用户去律所咨询前应准备的证据材料清单。
+
+
+            输出重点：
+
+            - 用户需要准备什么材料
+
+            - 为什么要准备
+
+            - 优先级是什么
+
+            - 哪些材料目前缺失
+
+            - 哪些材料涉及风险，需要注意合法获取
+
+
+            要求：
+
+            1. 不承诺案件结果
+
+            2. 不替代律师判断
+
+            3. 不输出具体胜诉概率
+
+            4. 不使用“净身出户”等绝对化表述
+
+            5. 证据建议必须具体、可执行
+
+            6. 优先围绕用户确认的诉求生成证据清单'
+        selected: false
+        structured_output:
+          schema:
+            properties:
+              confirmed_claims:
+                items:
+                  type: string
+                type: array
+              general_evidence:
+                items:
+                  type: object
+                type: array
+              lawyer_visit_checklist:
+                items:
+                  type: string
+                type: array
+              missing_evidence:
+                items:
+                  type: object
+                type: array
+              priority_evidence:
+                items:
+                  type: object
+                type: array
+              risk_notes:
+                items:
+                  type: string
+                type: array
+            required:
+            - confirmed_claims
+            - priority_evidence
+            - general_evidence
+            - missing_evidence
+            - risk_notes
+            - lawyer_visit_checklist
+            type: object
+        structured_output_enabled: true
+        title: Evidence Preparation Generation (2)
+        type: llm
+        vision:
+          enabled: false
+      height: 115
+      id: '17791719884180'
+      position:
+        x: 4387.935842960515
+        y: 240.17137577130143
+      positionAbsolute:
+        x: 4387.935842960515
+        y: 240.17137577130143
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        desc: 罗列证据清单
+        isInIteration: false
+        isInLoop: false
+        model:
+          completion_params:
+            temperature: 0.4
+          mode: chat
+          name: deepseek-v4-pro
+          provider: langgenius/deepseek/deepseek
+        prompt_template:
+        - id: 425aacc4-3ada-4212-b7d9-0f3ad3ecb98b
+          role: system
+          text: '你是婚姻家事诉求结构化助手中的“证据准备清单生成器”。
+
+
+            你的任务不是提供正式法律意见，也不是判断胜诉结果。
+
+
+            你的任务是根据：
+
+            1. 用户已确认的诉求
+
+            2. 当前案件事实
+
+            3. 各模块分析结果
+
+
+            生成用户去律所咨询前应准备的证据材料清单。
+
+
+            输出重点：
+
+            - 用户需要准备什么材料
+
+            - 为什么要准备
+
+            - 优先级是什么
+
+            - 哪些材料目前缺失
+
+            - 哪些材料涉及风险，需要注意合法获取
+
+
+            要求：
+
+            1. 不承诺案件结果
+
+            2. 不替代律师判断
+
+            3. 不输出具体胜诉概率
+
+            4. 不使用“净身出户”等绝对化表述
+
+            5. 证据建议必须具体、可执行
+
+            6. 优先围绕用户确认的诉求生成证据清单'
+        selected: false
+        structured_output:
+          schema:
+            properties:
+              confirmed_claims:
+                items:
+                  type: string
+                type: array
+              general_evidence:
+                items:
+                  type: object
+                type: array
+              lawyer_visit_checklist:
+                items:
+                  type: string
+                type: array
+              missing_evidence:
+                items:
+                  type: object
+                type: array
+              priority_evidence:
+                items:
+                  type: object
+                type: array
+              risk_notes:
+                items:
+                  type: string
+                type: array
+            required:
+            - confirmed_claims
+            - priority_evidence
+            - general_evidence
+            - missing_evidence
+            - risk_notes
+            - lawyer_visit_checklist
+            type: object
+        structured_output_enabled: true
+        title: Evidence Preparation Generation (3)
+        type: llm
+        vision:
+          enabled: false
+      height: 115
+      id: '17791719968260'
+      position:
+        x: 4387.935842960515
+        y: 427.7004703344571
+      positionAbsolute:
+        x: 4387.935842960515
+        y: 427.7004703344571
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#1779171844208.structured_output#}}'
+        selected: false
+        title: 最终输出—婚姻
+        type: answer
+        variables: []
+      height: 102
+      id: '1779172039930'
+      position:
+        x: 4901.819128440379
+        y: -145.25532873953625
+      positionAbsolute:
+        x: 4901.819128440379
+        y: -145.25532873953625
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#17791719873810.structured_output#}}'
+        selected: false
+        title: 最终输出—财产
+        type: answer
+        variables: []
+      height: 102
+      id: '1779172265992'
+      position:
+        x: 4896.606294729591
+        y: 57.65891388186759
+      positionAbsolute:
+        x: 4896.606294729591
+        y: 57.65891388186759
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#17791719884180.structured_output#}}'
+        selected: false
+        title: 最终输出—子女
+        type: answer
+        variables: []
+      height: 102
+      id: '1779172298249'
+      position:
+        x: 4896.606294729591
+        y: 240.17137577130143
+      positionAbsolute:
+        x: 4896.606294729591
+        y: 240.17137577130143
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#17791719968260.text#}}'
+        selected: false
+        title: 最终输出—过错
+        type: answer
+        variables: []
+      height: 102
+      id: '1779172324162'
+      position:
+        x: 4896.606294729591
+        y: 427.7004703344571
+      positionAbsolute:
+        x: 4896.606294729591
+        y: 427.7004703344571
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    viewport:
+      x: 654.033003097051
+      y: 341.54079642685593
+      zoom: 0.6138085294868433
+  rag_pipeline_variables: []

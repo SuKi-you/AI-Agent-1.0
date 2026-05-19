@@ -15,7 +15,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { supabase } from "@/lib/supabase"
 
 interface Claim {
   id: string
@@ -57,13 +56,13 @@ export function App() {
   const [visibleSections, setVisibleSections] = useState(0)
   const [activeTab, setActiveTab] = useState("chat")
   const [currentAnalysis, setCurrentAnalysis] = useState<AnalysisResult | null>(null)
-  const [conversationId, setConversationId] = useState<string | null>(null)
   const [currentStep, setCurrentStep] = useState<"idle" | "need_more_info" | "claim_selection">("idle")
   const [questions, setQuestions] = useState<string[]>([])
   const [possibleClaims, setPossibleClaims] = useState<Array<{ claim: string; confidence: string; reason: string }>>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const lastQueryRef = useRef<string>("")
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -77,90 +76,33 @@ export function App() {
     }
   }, [input])
 
-  const saveToDatabase = async (
-    userContent: string,
-    analysis: AnalysisResult,
-    convId: string | null
-  ) => {
-    let currentConvId = convId
-    if (!currentConvId) {
-      const { data } = await supabase
-        .from("conversations")
-        .insert({ title: userContent.slice(0, 50) })
-        .select("id")
-        .maybeSingle()
-      if (data) {
-        currentConvId = data.id
-        setConversationId(currentConvId)
-      }
-    }
-    if (!currentConvId) return
-
-    await supabase
-      .from("messages")
-      .insert({ conversation_id: currentConvId, role: "user", content: userContent })
-
-    const { data: assistantMsg } = await supabase
-      .from("messages")
-      .insert({ conversation_id: currentConvId, role: "assistant", content: JSON.stringify(analysis) })
-      .select("id")
-      .maybeSingle()
-
-    if (assistantMsg) {
-      await supabase.from("analysis_results").insert({
-        conversation_id: currentConvId,
-        message_id: assistantMsg.id,
-        case_type: analysis.caseType,
-        key_facts: analysis.keyFacts,
-        claims: analysis.claims,
-        risks: analysis.risks,
-        evidence_checklist: analysis.evidenceChecklist,
-        missing_info: analysis.missingInfo,
-      })
-    }
-  }
-
   const callIntentApi = async (query: string) => {
-    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dify-intent`
-    const response = await fetch(apiUrl, {
+    const response = await fetch("/api/intent", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, user: "demo-user" }),
     })
     if (!response.ok) {
       const errorData = await response.json().catch(() => null)
-      const detail = errorData?.error || errorData?.detail || `HTTP ${response.status}`
-      throw new Error(detail)
+      throw new Error(errorData?.error || errorData?.detail || `HTTP ${response.status}`)
     }
     const data = await response.json()
-    if (data.error) {
-      throw new Error(data.error)
-    }
+    if (data.error) { throw new Error(data.error) }
     return data.result
   }
 
   const callAnalysisApi = async (query: string, confirmedClaims: string[]) => {
-    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/dify-analysis`
-    const response = await fetch(apiUrl, {
+    const response = await fetch("/api/analysis", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, confirmed_claims: confirmedClaims, user: "demo-user" }),
     })
     if (!response.ok) {
       const errorData = await response.json().catch(() => null)
-      const detail = errorData?.error || errorData?.detail || `HTTP ${response.status}`
-      throw new Error(detail)
+      throw new Error(errorData?.error || errorData?.detail || `HTTP ${response.status}`)
     }
     const data = await response.json()
-    if (data.error) {
-      throw new Error(data.error)
-    }
+    if (data.error) { throw new Error(data.error) }
     return data.result
   }
 
@@ -168,11 +110,15 @@ export function App() {
     if (!input.trim() || isThinking) return
 
     const userContent = input.trim()
+    lastQueryRef.current = userContent
     const userMessage: Message = { role: "user", content: userContent }
     setMessages((prev) => [...prev, userMessage])
     setInput("")
     setIsThinking(true)
     setVisibleSections(0)
+    setCurrentStep("idle")
+    setQuestions([])
+    setPossibleClaims([])
 
     try {
       const result = await callIntentApi(userContent)
@@ -183,19 +129,19 @@ export function App() {
         setCurrentStep("need_more_info")
         const assistantMessage: Message = {
           role: "assistant",
-          content: questionsList.length > 0 ? questionsList.join("\n") : "请补充更多信息",
+          content: "为了更好地分析您的情况，请补充以下信息：",
         }
         setMessages((prev) => [...prev, assistantMessage])
         setIsThinking(false)
         return
       }
 
-      if (Array.isArray(result?.possible_claims)) {
+      if (Array.isArray(result?.possible_claims) && result.possible_claims.length > 0) {
         setPossibleClaims(result.possible_claims)
         setCurrentStep("claim_selection")
         const assistantMessage: Message = {
           role: "assistant",
-          content: "根据您的描述，我识别出以下可能的诉求，请确认：",
+          content: "根据您的描述，我识别出以下可能的诉求，请确认您想主张的内容：",
         }
         setMessages((prev) => [...prev, assistantMessage])
         setIsThinking(false)
@@ -204,7 +150,7 @@ export function App() {
 
       setIsThinking(false)
       if (result?.raw_text) {
-        const assistantMessage: Message = { role: "assistant", content: result.raw_text }
+        const assistantMessage: Message = { role: "assistant", content: String(result.raw_text) }
         setMessages((prev) => [...prev, assistantMessage])
       } else {
         const content = typeof result === "string" ? result : "无法识别您的意图，请尝试更详细地描述您的情况。"
@@ -223,60 +169,116 @@ export function App() {
   }
 
   const handleConfirmClaims = async (selectedClaimTexts: string[]) => {
+    if (selectedClaimTexts.length === 0) return
+
     setIsThinking(true)
     setCurrentStep("idle")
     setPossibleClaims([])
+
     const confirmedClaimsStr = selectedClaimTexts.join("、")
     const userMessage: Message = { role: "user", content: `确认诉求：${confirmedClaimsStr}` }
     setMessages((prev) => [...prev, userMessage])
 
-    const originalUserMessage = messages
-      .filter((m) => m.role === "user")
-      .map((m) => m.content)
-      .join("\n")
+    const originalQuery = lastQueryRef.current || selectedClaimTexts.join("，")
 
     try {
-      const result = await callAnalysisApi(originalUserMessage, selectedClaimTexts)
+      const result = await callAnalysisApi(originalQuery, selectedClaimTexts)
 
       if (result && typeof result === "object" && !Array.isArray(result)) {
-        const claimsRaw = Array.isArray(result.claims) ? result.claims : selectedClaimTexts
-        const evidenceRaw = Array.isArray(result.evidence_checklist)
-          ? result.evidence_checklist
-          : Array.isArray(result.evidenceChecklist)
-          ? result.evidenceChecklist
+        // 兼容 Dify Analysis App 的多种返回格式
+        const claimsRaw = Array.isArray(result.claims)
+          ? result.claims
+          : Array.isArray(result.confirmed_claims)
+          ? result.confirmed_claims
+          : selectedClaimTexts
+
+        // 证据：可能是 evidence_checklist、evidenceChecklist 数组，
+        // 也可能是 priority_evidence + general_evidence 的组合格式
+        let evidenceRaw: Array<string | { text?: string; item?: string; reason?: string; priority?: string; category?: string }> = []
+        if (Array.isArray(result.evidence_checklist)) {
+          evidenceRaw = result.evidence_checklist
+        } else if (Array.isArray(result.evidenceChecklist)) {
+          evidenceRaw = result.evidenceChecklist
+        } else {
+          const priorityEvidence = Array.isArray(result.priority_evidence) ? result.priority_evidence : []
+          const generalEvidence = Array.isArray(result.general_evidence) ? result.general_evidence : []
+          evidenceRaw = [
+            ...priorityEvidence.map((e: { item?: string; reason?: string }) => ({ ...e, text: e.item, priority: "high" as const, category: "关键证据" })),
+            ...generalEvidence.map((e: { item?: string; reason?: string }) => ({ ...e, text: e.item, priority: "medium" as const, category: "一般证据" })),
+          ]
+        }
+
+        // 风险提示：可能是 risks、risk_notes
+        const risksRaw = Array.isArray(result.risks)
+          ? result.risks
+          : Array.isArray(result.risk_notes)
+          ? result.risk_notes
+          : []
+
+        // 缺失信息：可能是 missing_info、missingInfo、missing_evidence
+        const missingRaw = Array.isArray(result.missing_info)
+          ? result.missing_info
+          : Array.isArray(result.missingInfo)
+          ? result.missingInfo
+          : Array.isArray(result.missing_evidence)
+          ? result.missing_evidence
           : []
 
         const analysis: AnalysisResult = {
-          caseType: result.case_type || result.caseType || "婚姻家庭纠纷",
-          keyFacts: Array.isArray(result.key_facts) ? result.key_facts : Array.isArray(result.keyFacts) ? result.keyFacts : [],
-          claims: claimsRaw.map((c: string | { text: string; category?: string }, i: number) => ({
+          caseType: String(result.case_type || result.caseType || "婚姻家庭纠纷"),
+          keyFacts: Array.isArray(result.key_facts)
+            ? result.key_facts.map(String)
+            : Array.isArray(result.keyFacts)
+            ? result.keyFacts.map(String)
+            : [],
+          claims: claimsRaw.map((c: string | { text?: string; claim?: string; item?: string; category?: string }, i: number) => ({
             id: String(i + 1),
-            text: typeof c === "string" ? c : (c.text || ""),
+            text: typeof c === "string" ? c : String(c.text || c.claim || c.item || ""),
             selected: true,
-            category: typeof c === "string" ? "诉求" : (c.category || "诉求"),
+            category: typeof c === "string" ? "诉求" : String(c.category || "诉求"),
           })),
-          risks: Array.isArray(result.risks) ? result.risks : [],
-          evidenceChecklist: evidenceRaw.map(
-            (e: string | { text: string; priority?: string; category?: string }, i: number) => ({
-              id: `e${i + 1}`,
-              text: typeof e === "string" ? e : (e.text || ""),
-              collected: false,
-              priority: (typeof e === "object" && e.priority) || "medium",
-              category: (typeof e === "object" && e.category) || "证据材料",
-            })
+          risks: risksRaw.map((r: string | { text?: string; item?: string; note?: string }) =>
+            typeof r === "string" ? r : String(r.text || r.item || r.note || "")
           ),
-          missingInfo: Array.isArray(result.missing_info) ? result.missing_info : Array.isArray(result.missingInfo) ? result.missingInfo : [],
+          evidenceChecklist: evidenceRaw.map(
+            (e, i: number) => {
+              const item = e as Record<string, string | undefined>
+              return {
+                id: `e${i + 1}`,
+                text: String(item.text || item.item || item.reason || ""),
+                collected: false,
+                priority: (item.priority === "high" || item.priority === "medium" || item.priority === "low") ? item.priority : "medium",
+                category: String(item.category || "证据材料"),
+              }
+            }
+          ),
+          missingInfo: (() => {
+            const items = missingRaw.map((m: string | { text?: string; item?: string; reason?: string }) =>
+              typeof m === "string" ? m : `${m.item || m.text || ""}${m.reason ? `：${m.reason}` : ""}`
+            )
+            const lawyerChecklist = Array.isArray(result.lawyer_visit_checklist) ? result.lawyer_visit_checklist : []
+            if (lawyerChecklist.length > 0) {
+              items.push("【咨询律师前建议准备】")
+              lawyerChecklist.forEach((tip: string) => items.push(`  → ${tip}`))
+            }
+            return items
+          })(),
         }
         setCurrentAnalysis(analysis)
         setIsThinking(false)
         const assistantMessage: Message = { role: "assistant", content: "", analysis }
         setMessages((prev) => [...prev, assistantMessage])
         revealSections()
-        saveToDatabase(confirmedClaimsStr, analysis, conversationId)
+      } else if (result && typeof result === "string") {
+        setIsThinking(false)
+        const assistantMessage: Message = { role: "assistant", content: result }
+        setMessages((prev) => [...prev, assistantMessage])
       } else {
         setIsThinking(false)
-        const content = typeof result === "string" ? result : "分析完成"
-        const assistantMessage: Message = { role: "assistant", content }
+        const assistantMessage: Message = {
+          role: "assistant",
+          content: "分析完成，但返回格式异常。请重试。",
+        }
         setMessages((prev) => [...prev, assistantMessage])
       }
     } catch (err) {
@@ -401,7 +403,7 @@ export function App() {
             ) : (
               <ScrollArea className="flex-1 py-6">
                 <div className="space-y-6 pr-4">
-                  {messages.map((msg, i) => (
+                  {Array.isArray(messages) && messages.map((msg, i) => (
                     <div key={i}>
                       {msg.role === "user" ? (
                         <UserBubble content={msg.content} />
@@ -417,7 +419,7 @@ export function App() {
                         />
                       ) : (
                         <div className="text-sm leading-relaxed text-foreground/80 whitespace-pre-wrap">
-                          {msg.content}
+                          {String(msg.content || "")}
                         </div>
                       )}
                     </div>
@@ -430,7 +432,7 @@ export function App() {
                         {questions.map((q, i) => (
                           <li key={i} className="flex items-start gap-2 text-sm text-foreground/80">
                             <span className="mt-1.5 size-1 shrink-0 rounded-full bg-foreground/40" />
-                            {q}
+                            {String(q)}
                           </li>
                         ))}
                       </ul>
@@ -524,13 +526,13 @@ export function App() {
                   <div className="space-y-5 p-4">
                     <div>
                       <p className="mb-2 text-xs font-medium text-muted-foreground">案件类型</p>
-                      <Badge variant="outline" className="text-xs">{currentAnalysis.caseType || "未知"}</Badge>
+                      <Badge variant="outline" className="text-xs">{String(currentAnalysis.caseType || "未知")}</Badge>
                     </div>
                     <div>
                       <p className="mb-2 text-xs font-medium text-muted-foreground">关键事实</p>
                       <div className="flex flex-wrap gap-1.5">
                         {Array.isArray(currentAnalysis.keyFacts) && currentAnalysis.keyFacts.map((f) => (
-                          <Badge key={f} variant="secondary" className="text-xs">{f}</Badge>
+                          <Badge key={f} variant="secondary" className="text-xs">{String(f)}</Badge>
                         ))}
                       </div>
                     </div>
@@ -540,7 +542,7 @@ export function App() {
                         {Array.isArray(currentAnalysis.risks) && currentAnalysis.risks.map((r) => (
                           <li key={r} className="flex items-start gap-2 text-xs text-foreground/70">
                             <span className="mt-1.5 size-1 shrink-0 rounded-full bg-chart-4" />
-                            {r}
+                            {String(r)}
                           </li>
                         ))}
                       </ul>
@@ -551,7 +553,7 @@ export function App() {
                         {Array.isArray(currentAnalysis.missingInfo) && currentAnalysis.missingInfo.map((m) => (
                           <li key={m} className="flex items-start gap-2 text-xs text-muted-foreground">
                             <span className="mt-1.5 size-1 shrink-0 rounded-full bg-muted-foreground/40" />
-                            {m}
+                            {String(m)}
                           </li>
                         ))}
                       </ul>
@@ -668,7 +670,8 @@ function MobilePanel({
 }
 
 function ClaimsPanel({ claims, onToggle }: { claims: Claim[]; onToggle: (id: string) => void }) {
-  const categories = [...new Set(claims.map((c) => c.category))]
+  const safeClaims = Array.isArray(claims) ? claims : []
+  const categories = [...new Set(safeClaims.map((c) => c.category))]
 
   return (
     <div className="space-y-5 p-4">
@@ -677,7 +680,7 @@ function ClaimsPanel({ claims, onToggle }: { claims: Claim[]; onToggle: (id: str
           选择您想要主张的诉求
         </p>
         <Badge variant="secondary" className="text-[10px]">
-          已选 {claims.filter((c) => c.selected).length}/{claims.length}
+          已选 {safeClaims.filter((c) => c.selected).length}/{safeClaims.length}
         </Badge>
       </div>
       {categories.map((category) => (
@@ -686,7 +689,7 @@ function ClaimsPanel({ claims, onToggle }: { claims: Claim[]; onToggle: (id: str
             {category}
           </p>
           <div className="space-y-2">
-            {claims
+            {safeClaims
               .filter((c) => c.category === category)
               .map((claim) => (
                 <label
@@ -698,7 +701,7 @@ function ClaimsPanel({ claims, onToggle }: { claims: Claim[]; onToggle: (id: str
                     onCheckedChange={() => onToggle(claim.id)}
                     className="mt-0.5"
                   />
-                  <span className="text-sm text-foreground">{claim.text}</span>
+                  <span className="text-sm text-foreground">{String(claim.text)}</span>
                 </label>
               ))}
           </div>
@@ -709,7 +712,8 @@ function ClaimsPanel({ claims, onToggle }: { claims: Claim[]; onToggle: (id: str
 }
 
 function EvidencePanel({ items, onToggle }: { items: EvidenceItem[]; onToggle: (id: string) => void }) {
-  const categories = [...new Set(items.map((e) => e.category))]
+  const safeItems = Array.isArray(items) ? items : []
+  const categories = [...new Set(safeItems.map((e) => e.category))]
   const priorityColors: Record<string, string> = {
     high: "bg-destructive",
     medium: "bg-chart-4",
@@ -728,7 +732,7 @@ function EvidencePanel({ items, onToggle }: { items: EvidenceItem[]; onToggle: (
           标记已收集的证据材料
         </p>
         <Badge variant="secondary" className="text-[10px]">
-          {items.filter((e) => e.collected).length}/{items.length} 已收集
+          {safeItems.filter((e) => e.collected).length}/{safeItems.length} 已收集
         </Badge>
       </div>
       {categories.map((category) => (
@@ -737,7 +741,7 @@ function EvidencePanel({ items, onToggle }: { items: EvidenceItem[]; onToggle: (
             {category}
           </p>
           <div className="space-y-2">
-            {items
+            {safeItems
               .filter((e) => e.category === category)
               .map((item) => (
                 <label
@@ -755,7 +759,7 @@ function EvidencePanel({ items, onToggle }: { items: EvidenceItem[]; onToggle: (
                   />
                   <div className="flex flex-1 flex-col gap-1">
                     <span className={`text-sm ${item.collected ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                      {item.text}
+                      {String(item.text)}
                     </span>
                   </div>
                   <span className={`mt-0.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${
@@ -809,7 +813,7 @@ function AssistantMessage({
     {
       label: "案件类型",
       content: (
-        <Badge variant="outline" className="text-xs">{analysis.caseType || "未知"}</Badge>
+        <Badge variant="outline" className="text-xs">{String(analysis.caseType || "未知")}</Badge>
       ),
     },
     {
@@ -817,7 +821,7 @@ function AssistantMessage({
       content: (
         <div className="flex flex-wrap gap-1.5">
           {keyFacts.map((f) => (
-            <Badge key={f} variant="secondary" className="text-xs">{f}</Badge>
+            <Badge key={String(f)} variant="secondary" className="text-xs">{String(f)}</Badge>
           ))}
         </div>
       ),
@@ -829,7 +833,7 @@ function AssistantMessage({
           {claims.filter((c) => c.selected).slice(0, 3).map((c) => (
             <div key={c.id} className="flex items-start gap-2 text-sm text-foreground/80">
               <span className="mt-1.5 size-1 shrink-0 rounded-full bg-foreground/40" />
-              {c.text}
+              {String(c.text)}
             </div>
           ))}
           {claims.filter((c) => c.selected).length > 3 && (
@@ -850,7 +854,7 @@ function AssistantMessage({
           {evidenceChecklist.filter((e) => e.priority === "high").slice(0, 3).map((e) => (
             <div key={e.id} className="flex items-start gap-2 text-sm text-foreground/80">
               <span className="mt-1.5 size-1 shrink-0 rounded-full bg-destructive" />
-              {e.text}
+              {String(e.text)}
             </div>
           ))}
           <button
@@ -867,9 +871,9 @@ function AssistantMessage({
       content: (
         <ul className="space-y-1">
           {risks.map((r) => (
-            <li key={r} className="flex items-start gap-2 text-sm text-foreground/60">
+            <li key={String(r)} className="flex items-start gap-2 text-sm text-foreground/60">
               <span className="mt-1.5 size-1 shrink-0 rounded-full bg-chart-4" />
-              {r}
+              {String(r)}
             </li>
           ))}
         </ul>
@@ -879,9 +883,9 @@ function AssistantMessage({
 
   return (
     <div className="space-y-4">
-      {content && (
+      {content ? (
         <div className="text-sm leading-relaxed text-foreground/80">{content}</div>
-      )}
+      ) : null}
       {sections.map(
         (section, i) =>
           i < visibleSections && (
@@ -907,7 +911,17 @@ function ClaimSelectionUI({
   claims: Array<{ claim: string; confidence: string; reason: string }>
   onConfirm: (selected: string[]) => void
 }) {
-  const [selected, setSelected] = useState<Set<number>>(new Set(claims.map((_, i) => i)))
+  const safeClaims = Array.isArray(claims) ? claims : []
+
+  const [selected, setSelected] = useState<Set<number>>(() => {
+    const initial = new Set<number>()
+    safeClaims.forEach((c, i) => {
+      if (c.confidence === "high" || c.confidence === "medium") {
+        initial.add(i)
+      }
+    })
+    return initial
+  })
 
   const toggle = (index: number) => {
     setSelected((prev) => {
@@ -926,8 +940,8 @@ function ClaimSelectionUI({
     }
     const labels: Record<string, string> = {
       high: "高",
-      medium: "中",
-      low: "低",
+      medium: "可能涉及",
+      low: "待确认",
     }
     return (
       <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${variants[confidence] || variants.medium}`}>
@@ -936,11 +950,19 @@ function ClaimSelectionUI({
     )
   }
 
+  if (safeClaims.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-secondary/50 p-4 text-sm text-muted-foreground">
+        无法解析诉求列表，请重试。
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3 rounded-xl border border-border bg-secondary/50 p-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
       <p className="text-xs font-medium text-muted-foreground">请确认您想主张的诉求：</p>
       <div className="space-y-2">
-        {claims.map((item, i) => (
+        {safeClaims.map((item, i) => (
           <label key={i} className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 transition-colors hover:bg-accent">
             <Checkbox
               checked={selected.has(i)}
@@ -949,22 +971,22 @@ function ClaimSelectionUI({
             />
             <div className="flex flex-1 flex-col gap-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-foreground">{item.claim}</span>
+                <span className="text-sm text-foreground">{String(item.claim)}</span>
                 {confidenceBadge(item.confidence)}
               </div>
               {item.reason && (
-                <span className="text-xs text-muted-foreground">{item.reason}</span>
+                <span className="text-xs text-muted-foreground">{String(item.reason)}</span>
               )}
             </div>
           </label>
         ))}
       </div>
       <button
-        onClick={() => onConfirm(claims.filter((_, i) => selected.has(i)).map((c) => c.claim))}
+        onClick={() => onConfirm(safeClaims.filter((_, i) => selected.has(i)).map((c) => c.claim))}
         disabled={selected.size === 0}
         className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity disabled:opacity-50"
       >
-        确认诉求并开始分析
+        确认诉求并生成分析
       </button>
     </div>
   )
