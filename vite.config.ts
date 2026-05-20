@@ -58,7 +58,17 @@ function difyProxyPlugin(): Plugin {
 
         try {
           const rawBody = await getBody(req)
-          const { query, confirmed_claims, user = "demo-user" } = JSON.parse(rawBody || "{}")
+          const parsed = JSON.parse(rawBody || "{}")
+          const query: string = typeof parsed.query === "string" ? parsed.query : String(parsed.query || "")
+          const confirmed_claims = parsed.confirmed_claims
+          const user = parsed.user || "demo-user"
+
+          if (!query) {
+            res.statusCode = 400
+            res.setHeader("Content-Type", "application/json")
+            res.end(JSON.stringify({ error: "query 不能为空" }))
+            return
+          }
 
           const inputs: Record<string, string> = {}
           if (extraInputs) {
@@ -78,6 +88,7 @@ function difyProxyPlugin(): Plugin {
 
           const difyUrl = `${difyBaseUrl}/chat-messages`
           console.log(`[dify-proxy] → ${difyUrl}`)
+          console.log(`[dify-proxy] dify request body:`, JSON.stringify(difyBody))
 
           const response = await fetch(difyUrl, {
             method: "POST",
@@ -91,6 +102,7 @@ function difyProxyPlugin(): Plugin {
           if (!response.ok) {
             const errorText = await response.text()
             console.error(`[dify-proxy] Dify error: status=${response.status}, body=${errorText}`)
+            console.error(`[dify-proxy] request that caused error:`, JSON.stringify(difyBody))
             res.statusCode = response.status
             res.setHeader("Content-Type", "application/json")
             res.end(JSON.stringify({ error: `Dify API 返回错误 (${response.status})`, detail: errorText }))
@@ -98,7 +110,12 @@ function difyProxyPlugin(): Plugin {
           }
 
           const data = await response.json()
-          const parsedAnswer = parseDifyAnswer(data.answer)
+
+          // Dify structured_output 可能将 JSON 放在 outputs 字段而非 answer
+          const rawAnswer = data.answer || (data.outputs ? JSON.stringify(data.outputs) : "")
+          console.log("[dify-proxy] raw answer type:", typeof rawAnswer, "preview:", String(rawAnswer).slice(0, 300))
+          const parsedAnswer = parseDifyAnswer(rawAnswer)
+          console.log("[dify-proxy] parsed keys:", Object.keys(parsedAnswer as object))
 
           res.setHeader("Content-Type", "application/json")
           res.end(JSON.stringify({
@@ -114,10 +131,12 @@ function difyProxyPlugin(): Plugin {
       }
 
       server.middlewares.use("/api/intent", (req, res) => {
+        console.log("[dify-proxy] /api/intent ← frontend called Intent Discovery App")
         handleRequest(req, res, intentApiKey)
       })
 
       server.middlewares.use("/api/analysis", (req, res) => {
+        console.log("[dify-proxy] /api/analysis ← frontend called Analysis/Evidence App")
         handleRequest(req, res, analysisApiKey)
       })
     },
