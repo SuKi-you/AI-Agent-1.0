@@ -14,6 +14,15 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
+import {
+  detectExcludedClaims,
+  getLowInfoGuidanceMessage,
+  detectDivorceIntent,
+  runClaimPipeline,
+  isValidClaim,
+  CONCRETE_FACT_PATTERNS,
+} from "@/utils/claimDetection"
+
 interface Claim {
   id: string
   text: string
@@ -29,6 +38,22 @@ interface EvidenceItem {
   category: string
 }
 
+interface LegalAnalysisItem {
+  legal_relation: string
+  related_claims: string
+  legal_elements: string[]
+  facts_to_prove: string[]
+}
+
+interface CoreEvidenceItem {
+  evidence: string
+  evidence_type: string
+  proves: string
+  corresponding_fact: string
+  related_claims: string
+  note: string
+}
+
 interface AnalysisResult {
   caseType: string
   keyFacts: string[]
@@ -36,6 +61,9 @@ interface AnalysisResult {
   risks: string[]
   evidenceChecklist: EvidenceItem[]
   missingInfo: string[]
+  legalAnalysis: LegalAnalysisItem[]
+  coreEvidence: CoreEvidenceItem[]
+  supportingEvidence: CoreEvidenceItem[]
 }
 
 interface Message {
@@ -46,252 +74,7 @@ interface Message {
 
 
 
-const NEGATION_KEYWORDS = [
-  "不想", "不要", "不主张", "不处理", "暂时不考虑",
-  "不争", "不需要", "不想要", "不打算", "放弃",
-  "不要求", "不涉及", "不准备",
-]
-
-const KNOWN_CLAIMS = [
-  "夫妻共同财产分割", "共同财产分割", "财产分割",
-  "子女抚养权", "孩子抚养权", "抚养权",
-  "子女抚养费", "孩子抚养费", "抚养费",
-  "解除婚姻关系", "离婚",
-  "离婚损害赔偿", "损害赔偿",
-  "探望权", "探视权",
-  "人身安全保护令", "保护令",
-  "精神损害赔偿",
-  "房产分割",
-  "财产",
-]
-
-function detectExcludedClaims(userInput: string): string[] {
-  const found: string[] = []
-  for (const keyword of NEGATION_KEYWORDS) {
-    let searchFrom = 0
-    while (true) {
-      const idx = userInput.indexOf(keyword, searchFrom)
-      if (idx === -1) break
-      const after = userInput.slice(idx + keyword.length)
-      for (const claim of KNOWN_CLAIMS) {
-        if (after.includes(claim) && !found.includes(claim)) {
-          found.push(claim)
-        }
-      }
-      searchFrom = idx + keyword.length
-    }
-  }
-  // 归一化：如果父名称匹配了，去掉更短的子名称
-  return found.filter((c, _i, arr) =>
-    !arr.some((other) => other !== c && other.includes(c))
-  )
-}
-
-// 过于细节的事实追问关键词 — 证据清单阶段才需要
-const DETAIL_PATTERNS = [
-  /房产/, /存款/, /车辆/, /债务/, /工资/, /收入/, /流水/,
-  /谁照顾/, /日常照顾/, /生活安排/, /教育/, /学费/, /学校/,
-  /分居.*证据/, /家暴.*证据/, /出轨.*证据/, /证据.*收集/,
-  /对方.*收入/, /对方.*财产/, /对方.*工作/, /对方.*名下/,
-  /具体.*金额/, /具体.*价值/, /市值/, /评估/,
-  /报警.*记录/, /就医.*记录/, /聊天.*记录/, /短信/,
-]
-
-function filterAndLimitQuestions(raw: string[], excludedClaims: string[]): string[] {
-  // 1. 过滤占位符
-  let qs = raw.filter((q) => !/^问题\d+/.test(q) && q.trim().length > 0)
-
-  // 2. 过滤过于细节的事实追问
-  qs = qs.filter((q) => !DETAIL_PATTERNS.some((p) => p.test(q)))
-
-  // 3. 已排除的诉求不要再问
-  if (excludedClaims.length > 0) {
-    qs = qs.filter((q) => !excludedClaims.some((ex) => q.includes(ex)))
-  }
-
-  // 4. 去重（相似问题只保留一个）
-  const seen = new Set<string>()
-  qs = qs.filter((q) => {
-    const key = q.slice(0, 6)
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-
-  // 5. 最多保留 2 个问题
-  qs = qs.slice(0, 2)
-
-  return qs
-}
-
-// 用户已提及的诉求关键词检测
-const MENTION_PATTERNS: { claim: string; label: string; patterns: RegExp[] }[] = [
-  { claim: "离婚", label: "离婚", patterns: [/离婚/, /想离/, /过不下去/, /分开/, /解除婚姻/, /离了/] },
-  { claim: "抚养权", label: "子女抚养权", patterns: [/抚养权/, /孩子归谁/, /孩子跟谁/, /子女.*谁照顾/, /孩子.*谁带/] },
-  { claim: "抚养费", label: "抚养费", patterns: [/抚养费/, /生活费/, /教育费/, /学费/] },
-  { claim: "财产分割", label: "财产分割", patterns: [/财产分割/, /房子/, /房产/, /共同财产/, /分财产/, /财产怎么/, /存款/, /车辆/] },
-  { claim: "损害赔偿", label: "家暴/出轨赔偿", patterns: [/出轨/, /家暴/, /打我/, /威胁/, /虐待/, /冷暴力/, /婚外情/] },
-  { claim: "探望权", label: "探望权", patterns: [/探望/, /探视/, /看孩子/] },
-]
-
-// 所有可能的追问方向
-const FOLLOW_UP_DIRECTIONS = [
-  { claim: "离婚", phrase: "离婚本身" },
-  { claim: "抚养权", phrase: "子女抚养权归属" },
-  { claim: "抚养费", phrase: "子女抚养费" },
-  { claim: "财产分割", phrase: "夫妻财产/房产/存款分割" },
-  { claim: "损害赔偿", phrase: "家暴或出轨的损害赔偿" },
-  { claim: "探望权", phrase: "子女探望安排" },
-]
-
-// 追问方向 → 排除时对应的 claim 名称
-const TOPIC_TO_EXCLUDED_CLAIMS: Record<string, string[]> = {
-  "抚养权": ["子女抚养权", "抚养权", "孩子抚养权"],
-  "探望权": ["探望权", "探视权"],
-  "抚养费": ["子女抚养费", "抚养费", "孩子抚养费"],
-  "财产分割": ["财产分割", "夫妻共同财产分割", "房产分割"],
-  "损害赔偿": ["离婚损害赔偿", "损害赔偿", "人身安全保护令"],
-}
-
-// 用户输入中是否表达了离婚/分开意图
-const DIVORCE_INTENT_PATTERNS = [
-  /我想离婚/, /想离婚/, /我要离婚/, /我想离/, /想离/,
-  /想分开/, /过不下去/, /感情不和/, /婚姻.*继续/,
-  /不想过了/, /不想继续/, /婚姻.*破裂/, /过不下去/,
-  /分开/, /离婚/, /离了/,
-]
-
-function detectDivorceIntent(accumulatedText: string): boolean {
-  return DIVORCE_INTENT_PATTERNS.some((p) => p.test(accumulatedText))
-}
-
-function ensureBaseDivorceClaim(
-  existingClaims: Array<{ claim: string; confidence: string; reason: string }>,
-  hasDivorceIntent: boolean,
-): Array<{ claim: string; confidence: string; reason: string }> {
-  if (!hasDivorceIntent) return existingClaims
-  const hasDivorceClaim = existingClaims.some(
-    (c) => c.claim.includes("离婚") || c.claim.includes("解除婚姻")
-  )
-  if (hasDivorceClaim) return existingClaims
-  return [
-    { claim: "离婚", confidence: "medium", reason: "用户表达婚姻关系难以继续或有离婚意愿" },
-    ...existingClaims,
-  ]
-}
-
-// 第一轮低信息输入检测 — 模糊意图、情绪宣泄、缺具体事实
-const LOW_INFO_DIVORCE_PATTERNS = [
-  /^我想离婚[。.]*$/, /^我想分开[。.]*$/, /^我想离[。.]*$/,
-  /^想离婚[。.]*$/, /^想离[。.]*$/, /^我要离婚[。.]*$/, /^我要离[。.]*$/,
-  /^过不下去/, /^想离开/, /^想跟他/, /^想跟她/,
-  /^不想过了[。.]*$/, /^不想跟他过了[。.]*$/, /^不想跟她过了[。.]*$/,
-  /^想结束.*婚姻/, /^婚姻.*走不下去/,
-  /^感情不和/, /^我不想继续/,
-]
-const CONCRETE_FACT_PATTERNS = [
-  /子女/, /孩子/, /小孩/, /儿子/, /女儿/,
-  /财产/, /出轨/, /家暴/, /债务/, /抚养/,
-  /房产/, /房子/, /存款/, /工资/, /收入/,
-  /暴力/, /虐待/, /动手/, /打了/, /威胁/,
-  /小三/, /第三者/, /婚外情/, /冷暴力/,
-  /赔偿/, /探望/, /探视/,
-]
-
-// 强情绪关键词 — 情绪宣泄但缺乏法律事实
-const EMOTION_KEYWORDS = [
-  "好难过", "难过", "受不了", "受够了", "撑不住", "撑不下去",
-  "过不下去", "不想活", "痛苦", "崩溃",
-  "不知道怎么办", "不知道该怎么办", "不知道要怎么", "不知道该怎么",
-  "想逃离", "想逃", "想离开", "想分开",
-  "真的很累", "好累", "心累",
-  "绝望", "无助", "折磨",
-]
-
-const LEGAL_FACT_KEYWORDS = [
-  "离婚", "孩子", "子女", "抚养权", "抚养费",
-  "房产", "财产", "债务", "出轨", "家暴",
-  "分居", "结婚", "领证", "暴力", "虐待",
-  "第三者", "婚外情", "赔偿", "探望", "探视",
-]
-
-function detectEmotionLowInfo(userInput: string): boolean {
-  const hasEmotion = EMOTION_KEYWORDS.some((kw) => userInput.includes(kw))
-  const hasLegalFact = LEGAL_FACT_KEYWORDS.some((kw) => userInput.includes(kw))
-  return hasEmotion && !hasLegalFact
-}
-
-function getLowInfoGuidanceMessage(): string {
-  return "我理解你现在可能正处在很痛苦、很混乱的状态。没关系，我们先不用急着下结论，也不用一次把所有事情说完整。\n\n你可以慢慢告诉我：这段婚姻里最让你想离开的原因是什么？比如感情不和、长期分居、孩子问题、财产问题、出轨、家暴，或其他让你难以承受的情况。\n\n我会根据你补充的信息，帮你整理可能涉及的诉求，并生成去律所咨询前可以准备的材料清单。"
-}
-
-function detectMentionedClaims(fullUserText: string): string[] {
-  const found: string[] = []
-  for (const { claim, patterns } of MENTION_PATTERNS) {
-    if (patterns.some((p) => p.test(fullUserText))) {
-      found.push(claim)
-    }
-  }
-  return found
-}
-
-function buildSmartFollowUp(
-  accumulatedText: string,
-  possibleClaimsRaw: Array<{ claim: string }>,
-  excludedClaims: string[],
-  allowNoMoreSuggestion: boolean,
-): { questions: string[]; topics: string[] } {
-  // 1. 从用户输入检测已提及的诉求
-  const mentionedFromInput = detectMentionedClaims(accumulatedText)
-
-  // 2. 从 possibleClaims 提取已识别的诉求名
-  const identifiedFromClaims = (possibleClaimsRaw || []).map((c) => {
-    for (const { claim, patterns } of MENTION_PATTERNS) {
-      if (patterns.some((p) => p.test(c.claim))) return claim
-    }
-    return ""
-  }).filter(Boolean)
-
-  // 3. 合并：已覆盖的诉求
-  const covered = [...new Set([...mentionedFromInput, ...identifiedFromClaims])]
-  console.log("[buildSmartFollowUp] recognizedClaimNames:", covered)
-  console.log("[buildSmartFollowUp] excludedClaims:", excludedClaims)
-
-  // 4. 未覆盖的追问方向（排除已覆盖 + 已排除）
-  const followUpCandidatesBefore = FOLLOW_UP_DIRECTIONS.filter(
-    (d) => !covered.includes(d.claim)
-  )
-  console.log("[buildSmartFollowUp] followUpCandidatesBeforeFilter:", followUpCandidatesBefore.map(d => d.phrase))
-
-  const candidates = followUpCandidatesBefore.filter(
-    (d) => !excludedClaims.some((ex) => d.phrase.includes(ex) || ex.includes(d.phrase))
-  )
-  console.log("[buildSmartFollowUp] followUpCandidatesAfterFilter:", candidates.map(d => d.phrase))
-
-  // 5. 没有未覆盖的方向 → 空
-  if (candidates.length === 0) return { questions: [], topics: [] }
-
-  // 6. 没有已覆盖的诉求 → 不生成"婚姻问题"兜底追问，返回空
-  if (covered.length === 0) {
-    console.log("[buildSmartFollowUp] covered is empty, skip vague follow-up")
-    return { questions: [], topics: [] }
-  }
-
-  const coveredLabels = covered
-    .map((c) => MENTION_PATTERNS.find((m) => m.claim === c)?.label || c)
-    .filter(Boolean)
-  const coveredText = coveredLabels.join("、")
-  const candidatePhrases = candidates.slice(0, 2).map((d) => d.phrase)
-  const candidateText = candidatePhrases.join("、")
-
-  const askedTopics = candidates.slice(0, 2).map((d) => d.claim)
-  const noMoreHint = allowNoMoreSuggestion ? "如果没有，可以直接说\"没有\"。" : ""
-  const question = `我理解您目前主要想处理的是【${coveredText}】。为了避免遗漏，除了这些之外，是否还涉及【${candidateText}】？${noMoreHint}`
-
-  console.log("[buildSmartFollowUp] finalFollowUpQuestion:", question)
-  console.log("[buildSmartFollowUp] lastFollowUpTopics:", askedTopics)
-  return { questions: [question], topics: askedTopics }
-}
+// ── 以下常量与函数已抽离至 @/utils/claimDetection.ts 和 @/utils/stateMachine.ts ──
 
 export function App() {
   const { theme, setTheme } = useTheme()
@@ -313,10 +96,7 @@ export function App() {
   const [caseDescription, setCaseDescription] = useState<string[]>([])
   const [excludedClaims, setExcludedClaims] = useState<string[]>([])
   const [selectedClaims, setSelectedClaims] = useState<Set<string>>(new Set())
-  const lastFollowUpQuestionRef = useRef<string>("")
-  const lastFollowUpTopicsRef = useRef<string[]>([])
   const lastQueryRef = useRef<string>("")
-  const wasFirstTurnLowInfoRef = useRef(false)
 
   const scrollToBottom = useCallback((force = false) => {
     const el = chatScrollRef.current
@@ -364,28 +144,123 @@ export function App() {
   }
 
   const callAnalysisApi = async (query: string, confirmedClaims: string[]) => {
-    console.log("[callAnalysisApi] request body:", { query, confirmed_claims: confirmedClaims })
+    const confirmedClaimsString = confirmedClaims.join(", ")
+    const inputs = { confirmed_claims: confirmedClaimsString }
+    const body = { inputs, query, response_mode: "blocking", user: "demo-user" }
+    console.log("[Analysis Request Body]", JSON.stringify(body, null, 2))
     const response = await fetch("/api/analysis", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, confirmed_claims: confirmedClaims, user: "demo-user" }),
+      body: JSON.stringify(body),
     })
+    console.log("[Analysis Response Status]", response.status, response.statusText)
     if (!response.ok) {
       const errorData = await response.json().catch(() => null)
+      console.error("[Analysis Error] HTTP", response.status, JSON.stringify(errorData, null, 2))
       throw new Error(errorData?.error || errorData?.detail || `HTTP ${response.status}`)
     }
     const data = await response.json()
-    console.log("[callAnalysisApi] raw response data:", data)
-    if (data.error) { throw new Error(data.error) }
+    console.log("[Analysis Raw Response]", JSON.stringify(data, null, 2))
+    if (data.error) {
+      console.error("[Analysis Error] Dify returned error:", JSON.stringify(data.error, null, 2))
+      throw new Error(data.error)
+    }
     return data.result
+  }
+
+  // 前端侧证据补充：当 Dify Analysis App 返回不完整证据清单时，根据已确认诉求补充缺失项
+  const ensureEvidenceCoverage = (
+    confirmedClaims: string[],
+    existingEvidence: Array<{ text?: string; item?: string; reason?: string; priority?: string; category?: string }>,
+    existingRisks: string[]
+  ) => {
+    const evidence = [...existingEvidence]
+    const risks = [...existingRisks]
+
+    const hasClaim = (kw: string) => confirmedClaims.some(c => c.includes(kw))
+    const evidenceTexts = () => evidence.map(e => e.text || e.item || "")
+
+    // ── 财产分割 / 房产分割 ──────────────────────────────
+    if (hasClaim("财产分割") || hasClaim("房产分割") || hasClaim("房产")) {
+      const items = [
+        { text: "房产证 / 不动产权证书", priority: "high", category: "财产分割", reason: "证明房屋产权归属及购买时间" },
+        { text: "购房合同 / 房屋买卖合同", priority: "high", category: "财产分割", reason: "证明购房事实及交易价格" },
+        { text: "房贷合同 / 抵押贷款合同", priority: "high", category: "房产分割", reason: "证明房贷余额及还款义务" },
+        { text: "房贷还款记录 / 银行还款流水", priority: "medium", category: "房产分割", reason: "区分婚前/婚后还款金额" },
+        { text: "首付款支付凭证 / 首付款来源证明", priority: "high", category: "房产分割", reason: "证明首付款出资来源及比例" },
+        { text: "夫妻共同财产清单（车辆、存款、理财、股权等）", priority: "high", category: "财产分割", reason: "全面梳理待分割财产" },
+        { text: "其他财产线索（对方名下隐藏资产）", priority: "medium", category: "财产分割", reason: "防止对方转移或隐匿财产" },
+      ]
+      for (const item of items) {
+        const key = item.text.slice(0, 4)
+        if (!evidenceTexts().some(t => t.includes(key))) {
+          evidence.push(item)
+        }
+      }
+    }
+
+    // ── 财产转移 ────────────────────────────────────────
+    if (hasClaim("财产转移")) {
+      const items = [
+        { text: "银行账户流水 / 交易明细（近1-2年）", priority: "high", category: "财产转移", reason: "反映资金流向及异常转账" },
+        { text: "大额转账记录 / 转账凭证", priority: "high", category: "财产转移", reason: "锁定转移时间及金额" },
+        { text: "异常取款记录 / 大额取现凭证", priority: "high", category: "财产转移", reason: "防止对方以现金形式转移财产" },
+        { text: "转账对象身份信息 / 收款方线索", priority: "medium", category: "财产转移", reason: "追溯资金最终流向" },
+        { text: "异常消费记录 / 大额消费凭证", priority: "medium", category: "财产转移", reason: "识别非正常家庭支出的消费" },
+        { text: "财产去向线索（聊天记录、录音、短信等）", priority: "medium", category: "财产转移", reason: "辅助证明对方转移意图" },
+        { text: "财产保全申请材料（如已申请）", priority: "low", category: "财产转移", reason: "防止财产进一步流失" },
+      ]
+      for (const item of items) {
+        const key = item.text.slice(0, 4)
+        if (!evidenceTexts().some(t => t.includes(key))) {
+          evidence.push(item)
+        }
+      }
+    }
+
+    // ── 债务处理 ────────────────────────────────────────
+    if (hasClaim("债务处理") || hasClaim("债务")) {
+      const items = [
+        { text: "借款合同 / 贷款合同", priority: "high", category: "债务处理", reason: "证明债务金额、利率、期限" },
+        { text: "欠条 / 借据", priority: "high", category: "债务处理", reason: "民间借贷的关键书面证据" },
+        { text: "信用卡账单 / 消费记录", priority: "high", category: "债务处理", reason: "反映信用卡债务规模及用途" },
+        { text: "网贷平台借款记录 / 截图", priority: "high", category: "债务处理", reason: "证明网贷债务存在及金额" },
+        { text: "贷款平台借款合同 / 协议", priority: "high", category: "债务处理", reason: "厘清各类平台借贷明细" },
+        { text: "债权人身份信息 / 联系方式", priority: "medium", category: "债务处理", reason: "便于法院核实债务真实性" },
+        { text: "债务用途证明（是否用于家庭共同生活）", priority: "high", category: "债务处理", reason: "判断是否属于夫妻共同债务的关键" },
+        { text: "还款记录 / 还款凭证", priority: "medium", category: "债务处理", reason: "反映已偿还金额及剩余债务" },
+        { text: "催收记录 / 催收通知", priority: "medium", category: "债务处理", reason: "证明债务真实存在且已到期" },
+        { text: "与债权人 / 对方的债务相关聊天记录、录音", priority: "medium", category: "债务处理", reason: "辅助证明债务知情及用途" },
+      ]
+      for (const item of items) {
+        const key = item.text.slice(0, 4)
+        if (!evidenceTexts().some(t => t.includes(key))) {
+          evidence.push(item)
+        }
+      }
+
+      // 债务风险提示
+      const debtRisks = [
+        "是否为夫妻共同债务需法院认定，需证明债务用于夫妻共同生活或共同经营",
+        "单方举债不一定属于共同债务，债权人主张共同债务需承担举证责任",
+        "建议保留所有转账凭证和债务沟通记录，防止对方否认债务或夸大金额",
+      ]
+      for (const risk of debtRisks) {
+        if (!risks.some(r => r.includes(risk.slice(0, 12)))) {
+          risks.push(risk)
+        }
+      }
+    }
+
+    return { supplementedEvidence: evidence, supplementedRisks: risks }
   }
 
   const handleSubmit = async () => {
     console.log("[handleSubmit] called, input:", JSON.stringify(input), "isThinking:", isThinking, "currentStep:", currentStep)
-    // 防御性恢复：如果 isThinking 异常卡在 true，先重置再继续
+    // 防止并发发送：如果 isThinking 为 true，直接拒绝，由 finally 兜底恢复
     if (isThinking) {
-      console.log("[handleSubmit] WARNING: isThinking was stuck at true, resetting to false")
-      setIsThinking(false)
+      console.log("[handleSubmit] BLOCKED — already thinking (isThinking=true), rejecting concurrent call")
+      return
     }
     if (!input.trim()) {
       console.log("[handleSubmit] BLOCKED — input empty")
@@ -394,238 +269,129 @@ export function App() {
 
     const userContent = input.trim()
 
-    // 检测本轮否定表达（在任何其他处理之前）
+    try {
+      setIsThinking(true)
+      // ═══════════════════════════════════════════
+      // 所有分支在此 try 块内执行，finally 保证 isThinking 恢复
+      // ═══════════════════════════════════════════
+
+    // 检测本轮否定表达
     const newlyExcluded = detectExcludedClaims(userContent)
+    const INVALID_LABELS = ["婚姻问题", "家庭问题", "感情问题", "法律问题", "纠纷", "婚姻家事", "情感困扰"]
+    const validExcluded = newlyExcluded.filter(c => !INVALID_LABELS.some(il => c.includes(il) || il.includes(c)))
 
-    const noMorePattern = /^(没有|没了|无|暂时没有|没有其他|就这些|就这个|只要这个|只想离婚|不涉及其他|就这样|没有了|没啥了|差不多了|就没了|只要.*就行|仅.*即可)$/
-    const isNoMore = noMorePattern.test(userContent)
-
-    // 第一轮低信息输入统一检测
-    const isFirstTurn = messages.length === 0
-    const hasConcreteFacts = CONCRETE_FACT_PATTERNS.some((p) => p.test(userContent))
-    const matchesDivorcePattern = LOW_INFO_DIVORCE_PATTERNS.some((p) => p.test(userContent))
-    const isEmotionLowInfoInput = detectEmotionLowInfo(userContent)
-    const isFirstTurnLowInfo = isFirstTurn && (matchesDivorcePattern || isEmotionLowInfoInput) && !hasConcreteFacts
-    const shouldAllowNoMoreClaims = possibleClaims.length > 0
-    const hasConcreteLegalFacts = hasConcreteFacts || LEGAL_FACT_KEYWORDS.some((kw) => userContent.includes(kw))
-
-    console.log("[handleSubmit] latestUserInput:", userContent)
-    console.log("[handleSubmit] isThinking before:", isThinking)
-    console.log("[handleSubmit] isFirstTurn:", isFirstTurn)
-    console.log("[handleSubmit] isEmotionLowInfoInput:", isEmotionLowInfoInput)
-    console.log("[handleSubmit] isLowInfoDivorceInput:", matchesDivorcePattern)
-    console.log("[handleSubmit] hasConcreteFacts:", hasConcreteFacts)
-    console.log("[handleSubmit] possibleClaims.length:", possibleClaims.length)
-    console.log("[handleSubmit] shouldCallDify:", !isFirstTurnLowInfo)
-    console.log("[handleSubmit] shouldAllowNoMoreClaims:", shouldAllowNoMoreClaims)
-    console.log("[handleSubmit] branch selected:", isFirstTurnLowInfo ? "lowInfoGuidance" : "normal")
-
-    // ── 第一轮低信息输入 → 统一情绪承接 + 引导，不调 Dify ──
-    if (isFirstTurnLowInfo) {
-      console.log("[handleSubmit] selectedTemplateName: getLowInfoGuidanceMessage")
-      console.log("[handleSubmit] branch: lowInfoGuidance — NO Dify call")
-      wasFirstTurnLowInfoRef.current = true
-      const updatedCase = [...caseDescription, userContent]
-      setCaseDescription(updatedCase)
-
-      const userMessage: Message = { role: "user", content: userContent }
-      setMessages((prev) => [...prev, userMessage])
-      setInput("")
-      setIsThinking(false)
-      setVisibleSections(0)
-
-      const followUpMsg = getLowInfoGuidanceMessage()
-      console.log("[handleSubmit] generatedAssistantMessage:", followUpMsg.slice(0, 60) + "...")
-      console.log("[handleSubmit] accumulatedUserInput:", JSON.stringify(updatedCase))
-      const assistantMessage: Message = { role: "assistant", content: followUpMsg }
-      setMessages((prev) => [...prev, assistantMessage])
-      console.log("[handleSubmit] isThinking after branch:", false)
-      return
-    }
-
-    // "没有"/"不涉及"类回复不追加到案情上下文
-    const updatedCase = (isNoMore || isTopicNegation) && newlyExcluded.length === 0
-      ? caseDescription
-      : [...caseDescription, userContent]
+    // 追加用户输入到案情上下文
+    const updatedCase = [...caseDescription, userContent]
     setCaseDescription(updatedCase)
     const updatedExcluded = [...excludedClaims]
-    for (const c of newlyExcluded) {
+    for (const c of validExcluded) {
       if (!updatedExcluded.includes(c)) updatedExcluded.push(c)
     }
-
-    console.log("[handleSubmit] ===== 状态机 =====")
-    console.log("[handleSubmit] currentStep:", currentStep)
-    console.log("[handleSubmit] latestUserInput:", userContent)
-    console.log("[handleSubmit] accumulatedUserInput:", JSON.stringify(updatedCase))
-    console.log("[handleSubmit] detectedExcludedClaims:", newlyExcluded)
-    console.log("[handleSubmit] excludedClaims:", updatedExcluded)
 
     const userMessage: Message = { role: "user", content: userContent }
     setMessages((prev) => [...prev, userMessage])
     setInput("")
     setVisibleSections(0)
 
-    // 检测是否针对上一轮追问的定向否定（"不涉及"/"没有这方面" 等）
-    const topicNegationPattern = /^(不涉及|不处理|不需要|不考虑|不想要|不主张|不要求|没有这方面|没有这个|没有这方|不涉及这个|不涉及这方面|没有相关|暂无这方面)$/
-    const isTopicNegation = topicNegationPattern.test(userContent)
-    const detectedNoOrNotInvolved = isNoMore || isTopicNegation
-    const hasLastTopics = lastFollowUpTopicsRef.current.length > 0
-
-    console.log("[handleSubmit] latestUserInput:", userContent)
-    console.log("[handleSubmit] lastFollowUpTopics:", lastFollowUpTopicsRef.current)
-    console.log("[handleSubmit] detectedNoOrNotInvolved:", detectedNoOrNotInvolved)
+    console.log("[handleSubmit] currentStep:", currentStep)
+    console.log("[handleSubmit] detectedExcludedClaims:", newlyExcluded)
     console.log("[handleSubmit] excludedClaims:", updatedExcluded)
-    console.log("[handleSubmit] accumulatedUserInput:", JSON.stringify(caseDescription))
-    console.log("[handleSubmit] isNoMoreClaims:", isNoMore)
-    console.log("[handleSubmit] currentPossibleClaims:", possibleClaims.map(c => c.claim))
-    console.log("[handleSubmit] currentStep before:", currentStep)
+    console.log("[handleSubmit] accumulatedUserInput:", JSON.stringify(updatedCase))
 
-    // ── 用户表示"没有更多" → 不再追问 ──
-    if (isNoMore && newlyExcluded.length === 0) {
-      if (possibleClaims.length > 0) {
-        // 有已识别诉求 → 直接进入 confirmation
-        setCurrentStep("confirmation")
-        setQuestions([])
-        setCaseDescription([])
-        lastFollowUpTopicsRef.current = []
-        console.log("[handleSubmit] currentStep after: confirmation (no more, has claims)")
-        const assistantMessage: Message = {
-          role: "assistant",
-          content: "好的，我已整理出以下诉求，请确认您想主张的内容：",
-        }
-        setMessages((prev) => [...prev, assistantMessage])
+    // ═══════════════════════════════════════════
+    // DISCOVERY 阶段
+    // ═══════════════════════════════════════════
+    if (currentStep === "discovery") {
+      const accText = updatedCase.join(" ")
+      const hasConcreteFacts = CONCRETE_FACT_PATTERNS.some((p) => p.test(accText))
+
+      if (!hasConcreteFacts) {
+        // 无具体事实 → 本地情绪承接引导，不调 Dify
+        console.log("[handleSubmit] discovery — no concrete facts, local guidance only")
+        setExcludedClaims(updatedExcluded)
+        const assistantMsg: Message = { role: "assistant", content: getLowInfoGuidanceMessage() }
+        setMessages((prev) => [...prev, assistantMsg])
         return
       }
-      // 第一轮低信息后第二轮说"没有" → 引导不要放弃
-      if (wasFirstTurnLowInfoRef.current && possibleClaims.length === 0) {
-        console.log("[handleSubmit] generatedFollowUpMessage (secondTurnNoMoreAfterLowInfo): blocking")
-        const assistantMessage: Message = {
-          role: "assistant",
-          content: `我理解您现在可能还不方便展开。仅凭"想离婚"还不足以整理完整诉求。您可以先从一个方面说起：原因、孩子、财产，或者对方是否同意离婚。`,
-        }
-        setMessages((prev) => [...prev, assistantMessage])
-        return
-      }
-      // discovery 阶段说"没有"且无 claims，但有 lastFollowUpTopics → 定向排除
-      if (hasLastTopics && currentStep === "discovery") {
-        const topicsToExclude: string[] = []
-        for (const topic of lastFollowUpTopicsRef.current) {
-          const mapped = TOPIC_TO_EXCLUDED_CLAIMS[topic]
-          if (mapped) topicsToExclude.push(...mapped)
-        }
-        const mergedExcluded = [...updatedExcluded]
-        for (const c of topicsToExclude) {
-          if (!mergedExcluded.includes(c)) mergedExcluded.push(c)
-        }
-        console.log("[handleSubmit] topicsToExclude from lastFollowUpTopics:", topicsToExclude)
-        console.log("[handleSubmit] mergedExcluded:", mergedExcluded)
 
-        const accumulatedForDivorce = [...caseDescription, userContent].join(" ")
-        const hasDivorceIntent = detectDivorceIntent(accumulatedForDivorce)
-        const ensuredClaims = ensureBaseDivorceClaim(possibleClaims, hasDivorceIntent)
-        const filtered = ensuredClaims.filter(
-          (c) => !mergedExcluded.some((ex) => c.claim.includes(ex) || ex.includes(c.claim))
+      // 有具体事实 → 调用 Intent Discovery
+      console.log("[handleSubmit] discovery — has concrete facts, calling Dify")
+      setQuestions([])
+
+      let fullQuery = updatedCase.map((line, i) => `${i + 1}. ${String(line)}`).join("\n") || userContent
+      if (updatedExcluded.length > 0) {
+        fullQuery += `\n\n用户已明确排除的诉求：\n${updatedExcluded.map((c) => `- ${c}`).join("\n")}`
+      }
+      lastQueryRef.current = fullQuery
+
+      try {
+        const result = await callIntentApi(fullQuery)
+        const difyClaims = Array.isArray(result?.possible_claims) ? result.possible_claims : []
+        const filtered = difyClaims.filter(
+          (c: { claim: string }) => !updatedExcluded.some((ex) => c.claim.includes(ex) || ex.includes(c.claim))
         )
+        const claims = runClaimPipeline(filtered, accText, updatedExcluded)
 
-        console.log("[handleSubmit] hasDivorceIntent:", hasDivorceIntent)
-        console.log("[handleSubmit] ensuredBaseClaims:", ensuredClaims.map(c => c.claim))
-        console.log("[handleSubmit] possibleClaims after filtering:", filtered.map(c => c.claim))
+        console.log("[handleSubmit] Dify claims:", difyClaims.map((c: { claim: string }) => c.claim))
+        console.log("[handleSubmit] after runClaimPipeline:", claims.map((c) => c.claim))
 
-        if (filtered.length > 0) {
-          setPossibleClaims(filtered)
-          setExcludedClaims(mergedExcluded)
-          setCaseDescription([])
-          setQuestions([])
-          lastFollowUpTopicsRef.current = []
-          setCurrentStep("confirmation")
-          const assistantMessage: Message = {
+        if (claims.length === 0) {
+          setExcludedClaims(updatedExcluded)
+          const assistantMsg: Message = {
             role: "assistant",
-            content: "好的，我已根据您的回复整理出以下诉求，请确认：",
+            content: "我还没有识别出明确诉求，请补充更多具体信息（例如孩子、财产、出轨、家暴等）。",
           }
-          setMessages((prev) => [...prev, assistantMessage])
+          setMessages((prev) => [...prev, assistantMsg])
           return
         }
-      }
-      if (currentStep === "confirmation") {
-        // 在 confirmation 阶段说"没有"且 possibleClaims 为空（都被排除了）
-        const assistantMessage: Message = {
-          role: "assistant",
-          content: "我目前还没有识别出明确诉求。您可以补充一句，例如：我想离婚 / 想要抚养权 / 有财产纠纷。",
-        }
-        setMessages((prev) => [...prev, assistantMessage])
-        return
-      }
-      // discovery 阶段说"没有"且无 claims → 给引导提示
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: "我目前还没有识别出明确诉求。您可以补充一句，例如：我想离婚 / 想要抚养权 / 有财产纠纷。",
-      }
-      setMessages((prev) => [...prev, assistantMessage])
-      return
-    }
 
-    // ── 定向否定：用户针对上一轮追问回复"不涉及" ──
-    if (isTopicNegation && !isNoMore && newlyExcluded.length === 0 && hasLastTopics && currentStep === "discovery") {
-      const topicsToExclude: string[] = []
-      for (const topic of lastFollowUpTopicsRef.current) {
-        const mapped = TOPIC_TO_EXCLUDED_CLAIMS[topic]
-        if (mapped) topicsToExclude.push(...mapped)
-      }
-      const mergedExcluded = [...updatedExcluded]
-      for (const c of topicsToExclude) {
-        if (!mergedExcluded.includes(c)) mergedExcluded.push(c)
-      }
-      console.log("[handleSubmit] topicNegation — topicsToExclude:", topicsToExclude)
-      console.log("[handleSubmit] topicNegation — mergedExcluded:", mergedExcluded)
-
-      const accumulatedForIntent = [...caseDescription, userContent].join(" ")
-      const hasDivorceIntent = detectDivorceIntent(accumulatedForIntent)
-      const ensuredClaims = ensureBaseDivorceClaim(possibleClaims, hasDivorceIntent)
-      const filtered = ensuredClaims.filter(
-        (c) => !mergedExcluded.some((ex) => c.claim.includes(ex) || ex.includes(c.claim))
-      )
-
-      console.log("[handleSubmit] hasDivorceIntent:", hasDivorceIntent)
-      console.log("[handleSubmit] ensuredBaseClaims:", ensuredClaims.map(c => c.claim))
-      console.log("[handleSubmit] possibleClaims after filtering:", filtered.map(c => c.claim))
-      console.log("[handleSubmit] currentStep:", filtered.length > 0 ? "confirmation" : "discovery")
-
-      if (filtered.length > 0) {
-        setPossibleClaims(filtered)
-        setExcludedClaims(mergedExcluded)
+        setPossibleClaims(claims)
+        setExcludedClaims(updatedExcluded)
         setCaseDescription([])
-        setQuestions([])
-        lastFollowUpTopicsRef.current = []
+        setSelectedClaims(new Set())
         setCurrentStep("confirmation")
-        const assistantMessage: Message = {
+        console.log("[handleSubmit] → entering confirmation")
+        const assistantMsg: Message = {
           role: "assistant",
-          content: "已收到您的反馈。当前可主张的诉求已更新，请确认：",
+          content: "根据您的描述，我识别出以下可能的诉求，请确认您想主张的内容：",
         }
-        setMessages((prev) => [...prev, assistantMessage])
-        return
+        setMessages((prev) => [...prev, assistantMsg])
+      } catch (err) {
+        console.error("[handleSubmit] Dify API error (discovery):", err)
+        setExcludedClaims(updatedExcluded)
+        const assistantMsg: Message = {
+          role: "assistant",
+          content: "网络出现异常，请稍后重新输入。",
+        }
+        setMessages((prev) => [...prev, assistantMsg])
       }
-
-      // filtered 为空但用户表达了离婚意图且没有 → 不应发生，但保留兜底
-      setExcludedClaims(mergedExcluded)
-      setCaseDescription([])
-      setQuestions([])
-      lastFollowUpTopicsRef.current = []
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: "我目前还没有识别出明确诉求，请补充是否涉及离婚、子女、财产、出轨或家暴。",
-      }
-      setMessages((prev) => [...prev, assistantMessage])
       return
     }
 
-    // ── confirmation 阶段：本地处理否定 + 补充事实重调 Intent Discovery ──
+    // ═══════════════════════════════════════════
+    // CONFIRMATION 阶段
+    // ═══════════════════════════════════════════
     if (currentStep === "confirmation") {
-      if (newlyExcluded.length > 0) {
+      // "没有更多"类回复 → 不调 Dify，保持现状
+      const noMorePattern = /^(没有|没了|无|暂时没有|没有其他|就这些|就这样|没有了|没啥了|差不多了)$/
+      if (noMorePattern.test(userContent) && validExcluded.length === 0) {
+        console.log("[handleSubmit] confirmation — noMore detected, staying")
+        setExcludedClaims(updatedExcluded)
+        const assistantMsg: Message = {
+          role: "assistant",
+          content: "好的。当前诉求没有变化，请确认或点击下方按钮生成证据清单。",
+        }
+        setMessages((prev) => [...prev, assistantMsg])
+        return
+      }
+
+      if (validExcluded.length > 0) {
+        // 明确否定 → 过滤排除的诉求
+        console.log("[handleSubmit] confirmation — exclusion:", validExcluded)
         setExcludedClaims(updatedExcluded)
         const filtered = possibleClaims.filter(
           (c) => !updatedExcluded.some((ex) => c.claim.includes(ex) || ex.includes(c.claim))
         )
-        // 同步清理 selectedClaims 中已排除的诉求
         setSelectedClaims((prev) => {
           const next = new Set(prev)
           for (const c of prev) {
@@ -635,247 +401,131 @@ export function App() {
           }
           return next
         })
-        console.log("[handleSubmit] possibleClaims before filter:", possibleClaims.map(c => c.claim))
-        console.log("[handleSubmit] possibleClaims after filter:", filtered.map(c => c.claim))
 
         if (filtered.length > 0) {
           setPossibleClaims(filtered)
-          const assistantMessage: Message = {
+          const assistantMsg: Message = {
             role: "assistant",
-            content: `已收到您的排除信息。当前可主张的诉求已更新，请确认：`,
+            content: "已收到您的排除信息。当前可主张的诉求已更新，请确认：",
           }
-          setMessages((prev) => [...prev, assistantMessage])
+          setMessages((prev) => [...prev, assistantMsg])
         } else {
-          setPossibleClaims([])
-          setSelectedClaims(new Set())
-          const assistantMessage: Message = {
-            role: "assistant",
-            content: "我还没有识别出明确诉求，请补充是否涉及离婚、子女、财产、出轨或家暴。",
+          // 全部被排除 → 检查离婚意图
+          const accText = updatedCase.join(" ")
+          if (detectDivorceIntent(accText)) {
+            const fallbackDivorce = [{ claim: "离婚", confidence: "medium", reason: "用户明确表达离婚意愿" }]
+            setPossibleClaims(fallbackDivorce)
+            setSelectedClaims(new Set())
+            const assistantMsg: Message = {
+              role: "assistant",
+              content: "已收到您的排除信息。当前仍可主张离婚诉求，请确认：",
+            }
+            setMessages((prev) => [...prev, assistantMsg])
+          } else {
+            setPossibleClaims([])
+            setSelectedClaims(new Set())
+            const assistantMsg: Message = {
+              role: "assistant",
+              content: "我还没有识别出明确诉求，请补充是否涉及离婚、子女、财产、出轨或家暴。",
+            }
+            setMessages((prev) => [...prev, assistantMsg])
           }
-          setMessages((prev) => [...prev, assistantMessage])
         }
         return
       }
 
-      // 没有否定词 → 用户补充新事实，重新调用 Intent Discovery
-      // 继续往下走到 discovery 逻辑
-    }
+      // 补充事实 → 重新调用 Intent Discovery → 合并
+      console.log("[handleSubmit] confirmation — supplement facts, calling Dify")
+      setQuestions([])
 
-    // ── discovery 阶段（或 confirmation 阶段补充事实）──
-    setIsThinking(true)
-    console.log("[handleSubmit] isThinking after branch: true (calling Dify)")
-    setQuestions([])
-
-    // 构建完整上下文
-    const baseQuery: string = updatedCase.map((line, i) => `${i + 1}. ${String(line)}`).join("\n") || userContent
-    console.log("[handleSubmit] accumulatedUserInput:", JSON.stringify(updatedCase))
-    let fullQuery = baseQuery
-    if (updatedExcluded.length > 0) {
-      fullQuery += `\n\n用户已明确排除的诉求：\n${updatedExcluded.map((c) => `- ${c}`).join("\n")}`
-    }
-    if (isNoMore) {
-      fullQuery += "\n\n用户表示没有更多补充了，请直接基于已有信息生成 possible_claims，不要再追问。"
-    }
-    lastQueryRef.current = fullQuery
-
-    console.log("[handleSubmit] fullQuery:", fullQuery)
-    console.log("[handleSubmit] called: Intent Discovery App → /api/intent")
-
-    try {
-      const result = await callIntentApi(fullQuery)
-      console.log("[handleSubmit] raw possible_claims:", result?.possible_claims)
-
-      // 智能追问：基于已提及诉求 + 已排除，动态生成
-      if (result?.status === "need_more_info") {
-        const rawQuestions: string[] = Array.isArray(result.questions) ? result.questions : []
-
-        // 用 Dify possible_claims（可能为空）跑智能追问
-        const difyClaims = Array.isArray(result.possible_claims) ? result.possible_claims : []
-        const accumulatedText = updatedCase.join(" ")
-        const { questions: smartQuestions, topics: smartTopics } = buildSmartFollowUp(accumulatedText, difyClaims, updatedExcluded, shouldAllowNoMoreClaims || difyClaims.length > 0)
-
-        // 智能追问为空时，fallback 到过滤后的 Dify 原始问题
-        let finalQuestions = smartQuestions.length > 0
-          ? smartQuestions
-          : filterAndLimitQuestions(rawQuestions, updatedExcluded)
-        let finalTopics = smartQuestions.length > 0 ? smartTopics : []
-
-        console.log("[handleSubmit] generatedFollowUpMessage:", finalQuestions)
-
-        // 去重：和上一轮追问相同 → 不再追问
-        const lastFQ = lastFollowUpQuestionRef.current
-        const isDuplicateFQ = lastFQ && finalQuestions.length === 1 && finalQuestions[0] === lastFQ
-        console.log("[handleSubmit] lastFollowUpQuestion:", lastFQ)
-        console.log("[handleSubmit] isDuplicateFollowUp:", isDuplicateFQ)
-
-        if (isDuplicateFQ) {
-          // 追问重复 → 尝试直接从 Dify possible_claims 进入 confirmation
-          if (difyClaims.length > 0) {
-            const filteredClaims = difyClaims.filter(
-              (c: { claim: string }) => !updatedExcluded.some((ex) =>
-                c.claim.includes(ex) || ex.includes(c.claim)
-              )
-            )
-            if (filteredClaims.length > 0) {
-              setPossibleClaims(filteredClaims)
-              setExcludedClaims(updatedExcluded)
-              setCaseDescription([])
-              setQuestions([])
-              setCurrentStep("confirmation")
-              console.log("[handleSubmit] currentStep after: confirmation (duplicate FQ, has claims)")
-              const assistantMessage: Message = {
-                role: "assistant",
-                content: "根据您的描述，我整理出以下诉求，请确认：",
-              }
-              setMessages((prev) => [...prev, assistantMessage])
-              setIsThinking(false)
-              return
-            }
-          }
-          finalQuestions = []
-          finalTopics = []
-        }
-
-        // 记录本轮的追问
-        if (finalQuestions.length === 1) {
-          lastFollowUpQuestionRef.current = finalQuestions[0]
-        } else if (finalQuestions.length === 0) {
-          lastFollowUpQuestionRef.current = ""
-        }
-        lastFollowUpTopicsRef.current = finalTopics
-
-        setQuestions(finalQuestions)
-        const hasRecognizedClaims = possibleClaims.length > 0 || difyClaims.length > 0
-        const recognizedClaimNames = [
-          ...possibleClaims.map(c => c.claim),
-          ...difyClaims.map((c: { claim: string }) => c.claim),
-        ]
-        console.log("[handleSubmit] recognizedClaimNames:", recognizedClaimNames)
-        console.log("[handleSubmit] selectedFollowUpTemplate:", hasRecognizedClaims ? "smartFollowUp" : "none")
-        if (finalQuestions.length > 0) {
-          setExcludedClaims(updatedExcluded)
-          const assistantMessage: Message = {
-            role: "assistant",
-            content: hasRecognizedClaims ? "我再确认一下，避免遗漏：" : "请再补充一些具体信息：",
-          }
-          setMessages((prev) => [...prev, assistantMessage])
-        } else {
-          // 没有可追问的 → 尝试直接从 Dify possible_claims 生成 claims
-          if (difyClaims.length > 0) {
-            const filteredClaims = difyClaims.filter(
-              (c: { claim: string }) => !updatedExcluded.some((ex) =>
-                c.claim.includes(ex) || ex.includes(c.claim)
-              )
-            )
-            if (filteredClaims.length > 0) {
-              setPossibleClaims(filteredClaims)
-              setExcludedClaims(updatedExcluded)
-              setCaseDescription([])
-              setQuestions([])
-              setCurrentStep("confirmation")
-              console.log("[handleSubmit] → entering confirmation (from need_more_info fallback)")
-              const assistantMessage: Message = {
-                role: "assistant",
-                content: "根据您的描述，我识别出以下可能的诉求，请确认您想主张的内容：",
-              }
-              setMessages((prev) => [...prev, assistantMessage])
-              setIsThinking(false)
-              return
-            }
-          }
-          const assistantMessage: Message = {
-            role: "assistant",
-            content: "我还没有识别出明确诉求，请补充是否涉及离婚、子女、财产、出轨或家暴。",
-          }
-          setMessages((prev) => [...prev, assistantMessage])
-        }
-        // 有 excluded 要在 discovery 阶段生效
-        if (newlyExcluded.length > 0) {
-          setExcludedClaims(updatedExcluded)
-        }
-        setIsThinking(false)
-        return
+      let fullQuery = updatedCase.map((line, i) => `${i + 1}. ${String(line)}`).join("\n") || userContent
+      if (updatedExcluded.length > 0) {
+        fullQuery += `\n\n用户已明确排除的诉求：\n${updatedExcluded.map((c) => `- ${c}`).join("\n")}`
       }
+      lastQueryRef.current = fullQuery
 
-      // possible_claims 非空 → 进入 confirmation（或 confirmation 内合并）
-      if (Array.isArray(result?.possible_claims) && result.possible_claims.length > 0) {
-        const rawNewClaims: Array<{ claim: string; confidence: string; reason: string }> = result.possible_claims
-        const filteredNewClaims = rawNewClaims.filter(
-          (c) => !updatedExcluded.some((ex) =>
-            c.claim.includes(ex) || ex.includes(c.claim)
-          )
+      try {
+        const result = await callIntentApi(fullQuery)
+        const difyClaims = Array.isArray(result?.possible_claims) ? result.possible_claims : []
+        const filtered = difyClaims.filter(
+          (c: { claim: string }) => !updatedExcluded.some((ex) => c.claim.includes(ex) || ex.includes(c.claim))
         )
-        console.log("[handleSubmit] possibleClaims before filter:", rawNewClaims.map((c: { claim: string }) => c.claim))
-        console.log("[handleSubmit] possibleClaims after filter:", filteredNewClaims.map((c: { claim: string }) => c.claim))
+        const accText = updatedCase.join(" ")
+        const claims = runClaimPipeline(filtered, accText, updatedExcluded)
 
-        if (filteredNewClaims.length === 0) {
-          setIsThinking(false)
+        console.log("[handleSubmit] Dify claims (supplement):", difyClaims.map((c: { claim: string }) => c.claim))
+        console.log("[handleSubmit] after runClaimPipeline:", claims.map((c) => c.claim))
+
+        if (claims.length === 0) {
           setExcludedClaims(updatedExcluded)
-          const assistantMessage: Message = {
+          const assistantMsg: Message = {
             role: "assistant",
-            content: "我还没有识别出明确诉求，请补充是否涉及离婚、子女、财产、出轨或家暴。",
+            content: possibleClaims.length > 0
+              ? "当前诉求没有变化，请确认或继续补充："
+              : "我还没有识别出明确诉求，请补充更多具体信息。",
           }
-          setMessages((prev) => [...prev, assistantMessage])
+          setMessages((prev) => [...prev, assistantMsg])
           return
         }
 
-        const wasInConfirmation = currentStep === "confirmation"
-
-        if (wasInConfirmation) {
-          // confirmation 阶段补充输入 → 合并诉求，保留已有勾选
-          const existingClaimTexts = new Set(possibleClaims.map((c) => c.claim))
-          const merged = [...possibleClaims]
-          for (const nc of filteredNewClaims) {
-            if (!existingClaimTexts.has(nc.claim)) {
-              merged.push(nc)
-            }
+        // 合并已有诉求，保留已勾选
+        const existingClaimTexts = new Set(possibleClaims.map((c) => c.claim))
+        const merged = [...possibleClaims]
+        const newlyMerged: Array<{ claim: string; confidence: string; reason: string }> = []
+        for (const nc of claims) {
+          if (!existingClaimTexts.has(nc.claim)) {
+            merged.push(nc)
+            newlyMerged.push(nc)
           }
-          setPossibleClaims(merged)
-          setExcludedClaims(updatedExcluded)
-          setCaseDescription([])
-          setQuestions([])
-          console.log("[handleSubmit] merged possibleClaims (staying in confirmation):", merged.map(c => c.claim))
-          const assistantMessage: Message = {
-            role: "assistant",
-            content: "已根据您补充的信息重新整理诉求，请确认更新后的诉求列表：",
-          }
-          setMessages((prev) => [...prev, assistantMessage])
-        } else {
-          setPossibleClaims(filteredNewClaims)
-          setExcludedClaims(updatedExcluded)
-          setCaseDescription([])
-          setQuestions([])
-          setSelectedClaims(new Set())
-          setCurrentStep("confirmation")
-          console.log("[handleSubmit] → entering confirmation phase")
-          const assistantMessage: Message = {
-            role: "assistant",
-            content: "根据您的描述，我识别出以下可能的诉求，请确认您想主张的内容：",
-          }
-          setMessages((prev) => [...prev, assistantMessage])
         }
 
-        setIsThinking(false)
-        return
-      }
+        console.log("[handleSubmit] merged claims:", merged.map((c) => c.claim))
+        console.log("[handleSubmit] newlyMerged:", newlyMerged.map((c) => c.claim))
 
-      // 没有任何识别结果
-      setIsThinking(false)
-      if (newlyExcluded.length > 0) setExcludedClaims(updatedExcluded)
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: "我还没有识别出明确诉求，请补充是否涉及离婚、子女、财产、出轨或家暴。",
+        setPossibleClaims(merged)
+        setExcludedClaims(updatedExcluded)
+        setCaseDescription([])
+
+        // 保留用户已手动勾选的诉求，新诉求默认不勾选
+        // selectedClaims 通过 ClaimSelectionUI 的 useState 同步，不需要额外 setSelectedClaims
+
+        const assistantMsg: Message = {
+          role: "assistant",
+          content: newlyMerged.length > 0
+            ? "已根据您补充的信息重新整理诉求，请确认："
+            : "当前诉求没有变化，请确认或继续补充：",
+        }
+        setMessages((prev) => [...prev, assistantMsg])
+      } catch (err) {
+        console.error("[handleSubmit] Dify API error (confirmation supplement):", err)
+        const assistantMsg: Message = {
+          role: "assistant",
+          content: "网络出现异常，请稍后重新输入。",
+        }
+        setMessages((prev) => [...prev, assistantMsg])
       }
-      setMessages((prev) => [...prev, assistantMessage])
-    } catch (err) {
-      setIsThinking(false)
-      const errorDetail = err instanceof Error ? err.message : "未知错误"
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: `请求失败：${errorDetail}`,
-      }
-      setMessages((prev) => [...prev, assistantMessage])
+      return
     }
+
+    // evidence 阶段不允许自由输入
+    console.log("[handleSubmit] evidence stage — input ignored")
+
+  } catch (error) {
+    console.error("[handleSubmit] ===== RUNTIME ERROR =====")
+    console.error("[handleSubmit] unexpected error:", error)
+    console.error("[handleSubmit] error message:", (error as Error)?.message ?? String(error))
+    console.error("[handleSubmit] error stack:", (error as Error)?.stack ?? "无堆栈")
+    console.error("[handleSubmit] error type:", typeof error)
+    console.error("[handleSubmit] ===== END RUNTIME ERROR =====")
+    const assistantMessage: Message = {
+      role: "assistant",
+      content: "系统出现错误，请稍后重试。",
+    }
+    setMessages((prev) => [...prev, assistantMessage])
+  } finally {
+    console.log("[handleSubmit] finally — ensuring isThinking=false")
+    setIsThinking(false)
+  }
   }
 
   const handleConfirmClaims = async (selectedClaimTexts: string[]) => {
@@ -910,8 +560,38 @@ export function App() {
       const result = await callAnalysisApi(originalQuery, filteredSelected)
       console.log("[handleConfirmClaims] raw result:", result)
       console.log("[handleConfirmClaims] result keys:", result ? Object.keys(result) : "null/undefined")
+      console.log("[Analysis Raw Response]", JSON.stringify(result).slice(0, 1000))
 
       if (result && typeof result === "object" && !Array.isArray(result)) {
+        // 处理 Dify 返回非 JSON 文本（raw_text）的情况
+        if (result.raw_text && Object.keys(result).length === 1) {
+          console.warn("[handleConfirmClaims] Dify returned raw_text (non-JSON answer), attempting text extraction")
+          const rawText = String(result.raw_text)
+          // 尝试从 markdown 中提取 JSON
+          const jsonMatch = rawText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/) || rawText.match(/(\{[\s\S]*\})/)
+          if (jsonMatch) {
+            try {
+              const extracted = JSON.parse(jsonMatch[1] || jsonMatch[0])
+              console.log("[handleConfirmClaims] extracted JSON from raw_text:", Object.keys(extracted))
+              // Recurse with the extracted object
+              // 不递归，直接在当前分支继续处理 extracted
+              Object.assign(result, extracted)
+            } catch {
+              console.warn("[handleConfirmClaims] could not parse JSON from raw_text")
+            }
+          }
+          // 如果提取失败，至少显示 raw_text 内容
+          if (!result.evidence_checklist && !result.priority_evidence && !result.general_evidence && !result.claims) {
+            setIsThinking(false)
+            const assistantMessage: Message = {
+              role: "assistant",
+              content: String(result.raw_text || "分析完成，但未能解析结构化结果。请重试。"),
+            }
+            setMessages((prev) => [...prev, assistantMessage])
+            return
+          }
+        }
+
         // 兼容 Dify Analysis App 的多种返回格式，并过滤已排除诉求
         let claimsRaw = Array.isArray(result.claims)
           ? result.claims
@@ -948,8 +628,14 @@ export function App() {
           return String(name).trim() !== ""
         })
 
+        // Fallback: Dify 返回了 { item, reason } 单条而非 evidence 数组
+        if (evidenceRaw.length === 0 && result.item && !result.claims && !result.case_type) {
+          console.warn("[handleConfirmClaims] Dify returned single { item, reason } instead of full evidence checklist, wrapping")
+          evidenceRaw = [{ text: String(result.item), reason: String(result.reason || ""), priority: "medium", category: "证据材料" }]
+        }
+
         // 风险提示：可能是 risks、risk_notes
-        const risksRaw = Array.isArray(result.risks)
+        let risksRaw: Array<string | { text?: string; item?: string; note?: string }> = Array.isArray(result.risks)
           ? result.risks
           : Array.isArray(result.risk_notes)
           ? result.risk_notes
@@ -963,6 +649,18 @@ export function App() {
           : Array.isArray(result.missing_evidence)
           ? result.missing_evidence
           : []
+
+        // 前端证据补充：Dify 返回不完整时，按已确认诉求补充缺失证据项
+        {
+          const { supplementedEvidence, supplementedRisks } = ensureEvidenceCoverage(filteredSelected, evidenceRaw, risksRaw)
+          console.log(
+            "[handleConfirmClaims] ensureEvidenceCoverage: evidence",
+            evidenceRaw.length, "→", supplementedEvidence.length,
+            "risks", risksRaw.length, "→", supplementedRisks.length
+          )
+          evidenceRaw = supplementedEvidence
+          risksRaw = supplementedRisks as typeof risksRaw
+        }
 
         console.log("[handleConfirmClaims] evidenceRaw:", evidenceRaw.length, "risksRaw:", risksRaw.length, "missingRaw:", missingRaw.length)
 
@@ -995,15 +693,37 @@ export function App() {
             }
           ),
           missingInfo: (() => {
-            const items = missingRaw.map((m: string | { text?: string; item?: string; title?: string; name?: string; material?: string; evidence_name?: string; reason?: string; description?: string; purpose?: string; detail?: string }) =>
-              typeof m === "string" ? m : `${m.item || m.title || m.name || m.material || m.evidence_name || m.text || ""}${(m.reason || m.description || m.purpose || m.detail) ? `：${m.reason || m.description || m.purpose || m.detail}` : ""}`
-            )
+            // 新结构 missing_information 优先，兼容旧字段
+            const newMissingInfo = Array.isArray(result.missing_information) ? result.missing_information : []
+            const items: string[] = []
+            if (newMissingInfo.length > 0) {
+              newMissingInfo.forEach((m: unknown) => {
+                if (typeof m === "string") items.push(m)
+                else if (m && typeof m === "object") {
+                  const o = m as Record<string, unknown>
+                  items.push(String(o.item || o.title || o.description || o.name || JSON.stringify(m)))
+                }
+              })
+            } else {
+              missingRaw.forEach((m: string | { text?: string; item?: string; title?: string; name?: string; material?: string; evidence_name?: string; reason?: string; description?: string; purpose?: string; detail?: string }) =>
+                typeof m === "string" ? items.push(m) : items.push(`${m.item || m.title || m.name || m.material || m.evidence_name || m.text || ""}${(m.reason || m.description || m.purpose || m.detail) ? `：${m.reason || m.description || m.purpose || m.detail}` : ""}`)
+              )
+            }
             const lawyerChecklist = Array.isArray(result.lawyer_visit_checklist) ? result.lawyer_visit_checklist : []
             if (lawyerChecklist.length > 0) {
               items.push("【咨询律师前建议准备】")
               lawyerChecklist.forEach((tip: string) => items.push(`  → ${tip}`))
             }
             return items
+          })(),
+          legalAnalysis: Array.isArray(result.legal_analysis) ? result.legal_analysis : [],
+          coreEvidence: (() => {
+            const el = (result as Record<string, unknown>).evidence_list as Record<string, unknown> | undefined
+            return Array.isArray(el?.core_evidence) ? el!.core_evidence as CoreEvidenceItem[] : []
+          })(),
+          supportingEvidence: (() => {
+            const el = (result as Record<string, unknown>).evidence_list as Record<string, unknown> | undefined
+            return Array.isArray(el?.supporting_evidence) ? el!.supporting_evidence as CoreEvidenceItem[] : []
           })(),
         }
         console.log("[handleConfirmClaims] built analysis.evidenceChecklist length:", analysis.evidenceChecklist.length)
@@ -1028,6 +748,11 @@ export function App() {
         setMessages((prev) => [...prev, assistantMessage])
       }
     } catch (err) {
+      console.error("[Analysis Error]", {
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+        type: typeof err,
+      })
       setIsThinking(false)
       const errorDetail = err instanceof Error ? err.message : "未知错误"
       const assistantMessage: Message = { role: "assistant", content: `分析请求失败：${errorDetail}` }
@@ -1084,7 +809,9 @@ export function App() {
   }, [isRecording])
 
   const selectedClaimsCount = currentAnalysis?.claims.filter((c) => c.selected).length ?? 0
-  const evidenceCount = currentAnalysis?.evidenceChecklist.length ?? 0
+  const evidenceCount = currentAnalysis
+    ? (currentAnalysis.coreEvidence.length + currentAnalysis.supportingEvidence.length) || currentAnalysis.evidenceChecklist.length
+    : 0
 
   const isEmpty = messages.length === 0 && !isThinking
 
@@ -1191,7 +918,7 @@ export function App() {
                     )}
                   </div>
                 ))}
-                {isThinking && <ThinkingIndicator />}
+                {isThinking && <ThinkingIndicator currentStep={currentStep} />}
                 {currentStep === "discovery" && Array.isArray(questions) && questions.length > 0 && (
                   <div className="space-y-2 rounded-xl border border-border bg-secondary/50 p-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <p className="text-xs font-medium text-muted-foreground">我再确认一下，避免遗漏：</p>
@@ -1208,7 +935,7 @@ export function App() {
                     )}
                   </div>
                 )}
-                {currentStep === "confirmation" && Array.isArray(possibleClaims) && possibleClaims.length > 0 && (
+                {currentStep === "confirmation" && !isThinking && Array.isArray(possibleClaims) && possibleClaims.length > 0 && (
                   <>
                     <ClaimSelectionUI
                       claims={possibleClaims}
@@ -1269,11 +996,11 @@ export function App() {
 
         {currentAnalysis && (
           <aside className="hidden w-[380px] min-h-0 border-l border-border lg:flex lg:flex-col overflow-hidden">
-            <ScrollArea className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 overflow-y-auto">
               <div className="space-y-4 p-4">
                 <AnalysisSidebar analysis={currentAnalysis} rawResult={rawAnalysisResult} />
               </div>
-            </ScrollArea>
+            </div>
           </aside>
         )}
       </div>
@@ -1310,6 +1037,84 @@ function filterValidEvidence(items: unknown[]): { name: string; reason: string }
   return filtered
 }
 
+function CollapsibleSection({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-secondary/50"
+      >
+        <span className="text-[11px] font-medium text-muted-foreground">{title}</span>
+        <span className="text-[10px] text-muted-foreground/60">{open ? "收起" : "展开"}</span>
+      </button>
+      {open && <div className="mt-2">{children}</div>}
+    </div>
+  )
+}
+
+function EvidenceItemCard({
+  item,
+  checked,
+  onToggle,
+}: {
+  item: CoreEvidenceItem
+  checked: boolean
+  onToggle: () => void
+}) {
+  const safe = (v?: string) => v || "—"
+  return (
+    <div className={`rounded-lg border p-3 transition-opacity ${checked ? "border-border/50 bg-accent/30 opacity-70" : "border-border bg-secondary/30"}`}>
+      <div className="flex items-start gap-2.5">
+        <Checkbox
+          checked={checked}
+          onCheckedChange={onToggle}
+          className="mt-0.5 shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-xs font-medium text-foreground/90">
+              {safe(item.evidence)}
+              {checked && <span className="ml-2 text-[10px] text-muted-foreground">已准备</span>}
+            </span>
+            {item.evidence_type && (
+              <Badge variant="outline" className="shrink-0 text-[10px]">{safe(item.evidence_type)}</Badge>
+            )}
+          </div>
+          {item.proves && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              <span className="font-medium text-foreground/60">证明目的：</span>{safe(item.proves)}
+            </p>
+          )}
+          {item.corresponding_fact && (
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <span className="font-medium text-foreground/60">待证事实：</span>{safe(item.corresponding_fact)}
+            </p>
+          )}
+          {item.related_claims && (
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <span className="font-medium text-foreground/60">对应诉求：</span>{safe(item.related_claims)}
+            </p>
+          )}
+          {item.note && (
+            <p className="mt-1 rounded bg-accent/50 px-2 py-1 text-[10px] text-muted-foreground">
+              {item.note}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AnalysisSidebar({
   analysis,
   rawResult,
@@ -1318,38 +1123,53 @@ function AnalysisSidebar({
   rawResult: Record<string, unknown> | null
 }) {
   const raw = rawResult || {}
+  const claims = Array.isArray(analysis.claims) ? analysis.claims : []
+  const riskNotes = Array.isArray(analysis.risks) ? analysis.risks : []
+  const lawyerChecklist = Array.isArray(raw.lawyer_visit_checklist) ? raw.lawyer_visit_checklist : []
 
+  const coreEvidence = Array.isArray(analysis.coreEvidence) ? analysis.coreEvidence : []
+  const supportingEvidence = Array.isArray(analysis.supportingEvidence) ? analysis.supportingEvidence : []
+  const legalAnalysis = Array.isArray(analysis.legalAnalysis) ? analysis.legalAnalysis : []
+  const missingInfo = Array.isArray(analysis.missingInfo) ? analysis.missingInfo : []
+
+  const hasNewEvidence = coreEvidence.length > 0 || supportingEvidence.length > 0
+  const hasLegalAnalysis = legalAnalysis.length > 0
+  const hasMissingInfo = missingInfo.length > 0
+
+  // 旧结构 fallback
   const priorityEvidence = filterValidEvidence(Array.isArray(raw.priority_evidence) ? raw.priority_evidence : [])
   const generalEvidence = filterValidEvidence(Array.isArray(raw.general_evidence) ? raw.general_evidence : [])
   const missingEvidence = filterValidEvidence(Array.isArray(raw.missing_evidence) ? raw.missing_evidence : [])
-  const riskNotes = Array.isArray(raw.risk_notes) ? raw.risk_notes : []
-  const lawyerChecklist = Array.isArray(raw.lawyer_visit_checklist) ? raw.lawyer_visit_checklist : []
+  const hasLegacyEvidence = priorityEvidence.length > 0 || generalEvidence.length > 0 || missingEvidence.length > 0
+  const hasAnyEvidence = hasNewEvidence || hasLegacyEvidence
 
-  const hasAnyEvidence = priorityEvidence.length > 0 || generalEvidence.length > 0 || missingEvidence.length > 0
+  // 证据勾选状态 — 新证据清单到达时自动重置
+  const [checkedEvidence, setCheckedEvidence] = useState<Record<string, boolean>>({})
+  useEffect(() => {
+    setCheckedEvidence({})
+  }, [coreEvidence, supportingEvidence])
 
-  const claims = Array.isArray(analysis.claims) ? analysis.claims : []
-
-  // 标记已确认诉求的辅助函数
-  const confidenceBadge = (confidence: string) => {
-    const variants: Record<string, string> = {
-      high: "bg-primary/10 text-primary",
-      medium: "bg-chart-4/10 text-chart-4",
-      low: "bg-muted text-muted-foreground",
-    }
-    const labels: Record<string, string> = { high: "高", medium: "可能涉及", low: "待确认" }
-    return (
-      <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${variants[confidence] || variants.medium}`}>
-        {labels[confidence] || confidence}
-      </span>
-    )
+  const toggleEvidence = (key: string) => {
+    setCheckedEvidence((prev) => {
+      const next = { ...prev }
+      if (next[key]) {
+        delete next[key]
+      } else {
+        next[key] = true
+      }
+      return next
+    })
   }
+
+  const coreChecked = coreEvidence.filter((_, i) => checkedEvidence[`core-${i}`]).length
+  const supportingChecked = supportingEvidence.filter((_, i) => checkedEvidence[`supporting-${i}`]).length
 
   return (
     <div className="space-y-5">
-      {/* 案件类型 */}
+      {/* 案件类型 — 主标题 */}
       <div>
-        <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">案件类型</p>
-        <Badge variant="outline" className="text-xs">{String(analysis.caseType || "婚姻家庭纠纷")}</Badge>
+        <p className="mb-1 text-[11px] font-medium text-muted-foreground">案件类型</p>
+        <h3 className="text-base font-semibold text-foreground">{String(analysis.caseType || "婚姻家庭纠纷")}</h3>
       </div>
 
       {/* 已确认诉求 */}
@@ -1367,10 +1187,86 @@ function AnalysisSidebar({
         </div>
       )}
 
-      {/* 证据清单区域 */}
-      {hasAnyEvidence ? (
+      {/* 分析依据 — 可折叠 */}
+      {hasLegalAnalysis && (
+        <CollapsibleSection title="分析依据">
+          <div className="space-y-3">
+            {legalAnalysis.map((item, i) => (
+              <div key={i} className="rounded-lg border border-border bg-secondary/20 p-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-foreground/90">{item.legal_relation || "法律关系"}</span>
+                  {item.related_claims && (
+                    <Badge variant="secondary" className="text-[10px]">{item.related_claims}</Badge>
+                  )}
+                </div>
+                {item.legal_elements && item.legal_elements.length > 0 && (
+                  <div className="mt-2">
+                    <span className="text-[10px] font-medium text-muted-foreground">法律要件：</span>
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      {item.legal_elements.map((el, j) => (
+                        <span key={j} className="rounded bg-accent/50 px-1.5 py-0.5 text-[10px] text-foreground/70">{el}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {item.facts_to_prove && item.facts_to_prove.length > 0 && (
+                  <div className="mt-1.5">
+                    <span className="text-[10px] font-medium text-muted-foreground">待证事实：</span>
+                    <div className="mt-0.5 space-y-0.5">
+                      {item.facts_to_prove.map((f, j) => (
+                        <p key={j} className="text-[10px] text-foreground/60">• {f}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* 证据清单 */}
+      {hasNewEvidence ? (
         <>
-          {/* 优先准备证据 */}
+          {coreEvidence.length > 0 && (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-[11px] font-medium text-muted-foreground">核心证据</p>
+                <span className="text-[10px] text-muted-foreground/70">已备 {coreChecked} / {coreEvidence.length}</span>
+              </div>
+              <div className="space-y-2">
+                {coreEvidence.map((item, i) => (
+                  <EvidenceItemCard
+                    key={`core-${i}-${item.evidence}`}
+                    item={item}
+                    checked={!!checkedEvidence[`core-${i}`]}
+                    onToggle={() => toggleEvidence(`core-${i}`)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {supportingEvidence.length > 0 && (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-[11px] font-medium text-muted-foreground">辅助证据</p>
+                <span className="text-[10px] text-muted-foreground/70">已备 {supportingChecked} / {supportingEvidence.length}</span>
+              </div>
+              <div className="space-y-2">
+                {supportingEvidence.map((item, i) => (
+                  <EvidenceItemCard
+                    key={`supporting-${i}-${item.evidence}`}
+                    item={item}
+                    checked={!!checkedEvidence[`supporting-${i}`]}
+                    onToggle={() => toggleEvidence(`supporting-${i}`)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : hasLegacyEvidence ? (
+        <>
           {priorityEvidence.length > 0 && (
             <SectionCard
               title="优先准备"
@@ -1380,8 +1276,6 @@ function AnalysisSidebar({
               defaultChecked={false}
             />
           )}
-
-          {/* 一般准备证据 */}
           {generalEvidence.length > 0 && (
             <SectionCard
               title="一般准备"
@@ -1391,13 +1285,11 @@ function AnalysisSidebar({
               defaultChecked={false}
             />
           )}
-
-          {/* 待补充材料 */}
           {missingEvidence.length > 0 && (
             <div>
               <p className="mb-2 text-[11px] font-medium text-muted-foreground">待补充材料</p>
               <div className="space-y-2">
-                {missingEvidence.map((e, i: number) => (
+                {missingEvidence.map((e, i) => (
                   <div key={i} className="rounded-lg border border-dashed border-border bg-secondary/30 p-3">
                     <p className="text-xs font-medium text-foreground/80">{e.name || "待补充项"}</p>
                     {e.reason && <p className="mt-1 text-[11px] text-muted-foreground">{e.reason}</p>}
@@ -1413,12 +1305,26 @@ function AnalysisSidebar({
         </div>
       )}
 
+      {/* 仍需补充的信息 */}
+      {hasMissingInfo && (
+        <CollapsibleSection title="仍需补充的信息">
+          <div className="space-y-1.5">
+            {missingInfo.map((info, i) => (
+              <div key={i} className="flex items-start gap-2 rounded-md bg-secondary/30 px-3 py-2">
+                <span className="mt-1 size-1.5 shrink-0 rounded-full bg-chart-4" />
+                <span className="text-[11px] leading-relaxed text-foreground/70">{info}</span>
+              </div>
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+
       {/* 风险提示 */}
       {riskNotes.length > 0 && (
         <div>
           <p className="mb-2 text-[11px] font-medium text-muted-foreground">风险提示</p>
           <div className="space-y-1.5">
-            {riskNotes.map((r: unknown, i: number) => (
+            {riskNotes.map((r: string, i: number) => (
               <div key={i} className="flex items-start gap-2 rounded-md bg-chart-4/5 px-3 py-2">
                 <span className="mt-1 size-1.5 shrink-0 rounded-full bg-chart-4" />
                 <span className="text-[11px] leading-relaxed text-foreground/70">{String(r)}</span>
@@ -1585,7 +1491,7 @@ function MobilePanel({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background lg:hidden">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
         <span className="text-sm font-medium text-foreground">分析报告</span>
         <button
           onClick={() => setOpen(false)}
@@ -1594,11 +1500,11 @@ function MobilePanel({
           <XIcon className="size-4" />
         </button>
       </div>
-      <ScrollArea className="flex-1">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-4">
           <AnalysisSidebar analysis={analysis} rawResult={rawResult} />
         </div>
-      </ScrollArea>
+      </div>
     </div>
   )
 }
@@ -1737,7 +1643,14 @@ function AssistantMessage({
   const keyFacts = Array.isArray(analysis.keyFacts) ? analysis.keyFacts : []
   const claims = Array.isArray(analysis.claims) ? analysis.claims : []
   const evidenceChecklist = Array.isArray(analysis.evidenceChecklist) ? analysis.evidenceChecklist : []
+  const coreEvidence = Array.isArray(analysis.coreEvidence) ? analysis.coreEvidence : []
+  const supportingEvidence = Array.isArray(analysis.supportingEvidence) ? analysis.supportingEvidence : []
   const risks = Array.isArray(analysis.risks) ? analysis.risks : []
+  const hasNewEvidence = coreEvidence.length > 0 || supportingEvidence.length > 0
+  const totalEvidence = hasNewEvidence ? coreEvidence.length + supportingEvidence.length : evidenceChecklist.length
+  const topEvidenceItems = hasNewEvidence
+    ? coreEvidence.slice(0, 3).map(e => e.evidence)
+    : evidenceChecklist.filter((e) => e.priority === "high").slice(0, 3).map(e => e.text)
 
   const sections = [
     {
@@ -1776,22 +1689,25 @@ function AssistantMessage({
     },
     {
       label: "证据清单",
-      content: evidenceChecklist.length > 0 ? (
+      content: totalEvidence > 0 ? (
         <div className="space-y-1.5">
-          {evidenceChecklist.filter((e) => e.priority === "high").slice(0, 3).map((e) => (
-            <div key={e.id} className="flex items-start gap-2 text-sm text-foreground/80">
+          {topEvidenceItems.map((text, i) => (
+            <div key={i} className="flex items-start gap-2 text-sm text-foreground/80">
               <span className="mt-1.5 size-1 shrink-0 rounded-full bg-destructive" />
-              {String(e.text)}
+              {String(text)}
             </div>
           ))}
           <span className="text-xs text-muted-foreground">
-            共 {evidenceChecklist.length} 项（详见右侧报告）
+            {hasNewEvidence && (
+              <span>核心 {coreEvidence.length} 项 + 辅助 {supportingEvidence.length} 项（详见右侧报告）</span>
+            )}
+            {!hasNewEvidence && (
+              <span>共 {evidenceChecklist.length} 项（详见右侧报告）</span>
+            )}
           </span>
         </div>
       ) : (
-        <div className="text-sm text-destructive">
-          证据清单生成失败，请检查 Dify Analysis 应用配置或重试。
-        </div>
+        <div className="text-sm text-muted-foreground">暂无</div>
       ),
     },
     {
@@ -1844,21 +1760,13 @@ function ClaimSelectionUI({
   onSelectionChange: (next: Set<string>) => void
 }) {
   const safeClaims = Array.isArray(claims) ? claims : []
+  const validClaims = safeClaims.filter(isValidClaim)
 
-  const [selected, setSelected] = useState<Set<string>>(() => {
-    if (selectedClaims.size > 0) return new Set(selectedClaims)
-    const initial = new Set<string>()
-    safeClaims.forEach((c) => {
-      if (c.confidence === "high" || c.confidence === "medium") {
-        initial.add(c.claim)
-      }
-    })
-    return initial
-  })
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(selectedClaims))
 
-  // 当 possibleClaims 变化时（合并/过滤），同步清理已不存在的选中项
+  // parent → child: 当 possibleClaims 变化时（合并/过滤），清理已不存在的选中项
   useEffect(() => {
-    const currentClaimTexts = new Set(safeClaims.map((c) => c.claim))
+    const currentClaimTexts = new Set(validClaims.map((c) => c.claim))
     setSelected((prev) => {
       const next = new Set(prev)
       let changed = false
@@ -1867,14 +1775,18 @@ function ClaimSelectionUI({
       }
       return changed ? next : prev
     })
-  }, [safeClaims])
+  }, [validClaims])
+
+  // child → parent: 用户勾选/取消后同步到父组件 selectedClaims
+  useEffect(() => {
+    onSelectionChange(selected)
+  }, [selected, onSelectionChange])
 
   const toggle = (claimText: string) => {
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(claimText)) next.delete(claimText)
       else next.add(claimText)
-      onSelectionChange(next)
       return next
     })
   }
@@ -1886,7 +1798,7 @@ function ClaimSelectionUI({
       low: "bg-muted text-muted-foreground",
     }
     const labels: Record<string, string> = {
-      high: "高",
+      high: "明确",
       medium: "可能涉及",
       low: "待确认",
     }
@@ -1897,7 +1809,7 @@ function ClaimSelectionUI({
     )
   }
 
-  if (safeClaims.length === 0) {
+  if (validClaims.length === 0) {
     return (
       <div className="rounded-xl border border-border bg-secondary/50 p-4 text-sm text-muted-foreground">
         无法解析诉求列表，请重试。
@@ -1909,7 +1821,7 @@ function ClaimSelectionUI({
     <div className="space-y-3 rounded-xl border border-border bg-secondary/50 p-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
       <p className="text-xs font-medium text-muted-foreground">请确认您想主张的诉求：</p>
       <div className="space-y-2">
-        {safeClaims.map((item, i) => (
+        {validClaims.map((item, i) => (
           <label key={i} className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 transition-colors hover:bg-accent">
             <Checkbox
               checked={selected.has(item.claim)}
@@ -1933,13 +1845,19 @@ function ClaimSelectionUI({
         disabled={selected.size === 0}
         className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity disabled:opacity-50"
       >
-        确认诉求并生成证据清单
+        {selected.size === 0 ? "请至少选择一个诉求" : "确认诉求并生成证据清单"}
       </button>
     </div>
   )
 }
 
-function ThinkingIndicator() {
+function getLoadingMessage(currentStep: string): string {
+  if (currentStep === "confirmation") return "正在根据您补充的信息重新整理诉求..."
+  if (currentStep === "evidence") return "正在生成证据清单..."
+  return "正在分析案情..."
+}
+
+function ThinkingIndicator({ currentStep }: { currentStep: string }) {
   return (
     <div className="flex items-center gap-2 py-2 animate-in fade-in duration-300">
       <div className="flex gap-1">
@@ -1947,7 +1865,7 @@ function ThinkingIndicator() {
         <span className="size-1.5 animate-pulse rounded-full bg-muted-foreground/50" style={{ animationDelay: "150ms" }} />
         <span className="size-1.5 animate-pulse rounded-full bg-muted-foreground/50" style={{ animationDelay: "300ms" }} />
       </div>
-      <span className="text-xs text-muted-foreground/60">正在分析案情...</span>
+      <span className="text-xs text-muted-foreground/60">{getLoadingMessage(currentStep)}</span>
     </div>
   )
 }

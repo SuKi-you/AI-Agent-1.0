@@ -60,8 +60,12 @@ function difyProxyPlugin(): Plugin {
           const rawBody = await getBody(req)
           const parsed = JSON.parse(rawBody || "{}")
           const query: string = typeof parsed.query === "string" ? parsed.query : String(parsed.query || "")
-          const confirmed_claims = parsed.confirmed_claims
+          // 兼容两种格式：顶层 confirmed_claims（旧）或 inputs.confirmed_claims（新）
+          const confirmed_claims = parsed.confirmed_claims || (parsed.inputs && parsed.inputs.confirmed_claims)
           const user = parsed.user || "demo-user"
+
+          console.log("[dify-proxy] parsed query:", String(query).slice(0, 200))
+          console.log("[dify-proxy] parsed confirmed_claims:", confirmed_claims)
 
           if (!query) {
             res.statusCode = 400
@@ -75,7 +79,9 @@ function difyProxyPlugin(): Plugin {
             Object.assign(inputs, extraInputs)
           }
 
-          if (Array.isArray(confirmed_claims)) {
+          if (typeof confirmed_claims === "string" && confirmed_claims.trim()) {
+            inputs.confirmed_claims = confirmed_claims.trim()
+          } else if (Array.isArray(confirmed_claims)) {
             inputs.confirmed_claims = confirmed_claims.join("、")
           }
 
@@ -110,12 +116,27 @@ function difyProxyPlugin(): Plugin {
           }
 
           const data = await response.json()
+          console.log("[dify-proxy] === Dify Raw Response ===")
+          console.log("[dify-proxy] full data keys:", Object.keys(data))
+          console.log("[dify-proxy] data.answer type:", typeof data.answer, "preview:", String(data.answer || "").slice(0, 500))
+          console.log("[dify-proxy] data.data?.outputs:", JSON.stringify(data.data?.outputs || "N/A").slice(0, 300))
+          console.log("[dify-proxy] data.outputs:", JSON.stringify(data.outputs || "N/A").slice(0, 300))
 
-          // Dify structured_output 可能将 JSON 放在 outputs 字段而非 answer
-          const rawAnswer = data.answer || (data.outputs ? JSON.stringify(data.outputs) : "")
-          console.log("[dify-proxy] raw answer type:", typeof rawAnswer, "preview:", String(rawAnswer).slice(0, 300))
+          // Dify 多种返回格式：answer / outputs / data.outputs / data.outputs.structured_output
+          let rawAnswer = ""
+          if (data.answer) {
+            rawAnswer = data.answer
+          } else if (data.data?.outputs?.structured_output) {
+            rawAnswer = JSON.stringify(data.data.outputs.structured_output)
+          } else if (data.data?.outputs) {
+            rawAnswer = JSON.stringify(data.data.outputs)
+          } else if (data.outputs) {
+            rawAnswer = JSON.stringify(data.outputs)
+          }
+          console.log("[dify-proxy] extracted rawAnswer type:", typeof rawAnswer, "length:", rawAnswer.length, "preview:", rawAnswer.slice(0, 500))
           const parsedAnswer = parseDifyAnswer(rawAnswer)
           console.log("[dify-proxy] parsed keys:", Object.keys(parsedAnswer as object))
+          console.log("[dify-proxy] === End Dify Response ===")
 
           res.setHeader("Content-Type", "application/json")
           res.end(JSON.stringify({
