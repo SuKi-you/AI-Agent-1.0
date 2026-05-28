@@ -12,7 +12,10 @@ dist
 dist-ssr
 *.local
 .env
+.env.*
 .env.local
+build/
+.vite/
 .bolt
 
 # Editor directories and files
